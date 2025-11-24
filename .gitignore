@@ -1,3 +1,55 @@
-z-ai-proxy/proxy
-z-ai-proxy/tiktoken/
-z-ai-proxy/internal/handler/tiktoken/
+# Go (Backend)
+# Binaries
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# The main binary name 
+conv3n
+main
+
+# Go modules
+vendor/
+
+# Bun / Node / TypeScript (Runtime)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# bun.lockb
+
+# Database (SQLite) & State
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Runtime & Temporary Files
+tmp/
+temp/
+logs/
+*.log
+
+# IDE & System
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
