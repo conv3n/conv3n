@@ -1,0 +1,27 @@
+{
+    "id": "condition-demo",
+    "name": "Condition Demo Workflow",
+    "blocks": [
+        {
+            "id": "fetch_todo",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://jsonplaceholder.typicode.com/todos/1",
+                "method": "GET"
+            }
+        },
+        {
+            "id": "check_completed",
+            "type": "std/condition",
+            "config": {
+                "expression": "input.data.completed === true"
+            }
+        }
+    ],
+    "connections": [
+        {
+            "from": "fetch_todo",
+            "to": "check_completed"
+        }
+    ]
+}

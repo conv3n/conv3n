@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/conv3n/conv3n/internal/api"
 	"github.com/conv3n/conv3n/internal/engine"
 	"github.com/conv3n/conv3n/internal/storage"
 )
@@ -73,7 +74,18 @@ func runServer(blocksDir string, store storage.Storage) {
 	}
 
 	mux := http.NewServeMux()
+	
+	// Execution API
 	mux.HandleFunc("POST /api/run", server.handleRun)
+
+	// Workflow CRUD API
+	wfHandler := api.NewWorkflowHandler(store)
+	mux.HandleFunc("POST /api/workflows", wfHandler.Create)
+	mux.HandleFunc("GET /api/workflows/{id}", wfHandler.Get)
+	mux.HandleFunc("PUT /api/workflows/{id}", wfHandler.Update)
+	mux.HandleFunc("DELETE /api/workflows/{id}", wfHandler.Delete)
+	mux.HandleFunc("GET /api/workflows", wfHandler.List)
+
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 		w.Write([]byte("OK"))
@@ -183,3 +195,4 @@ func runCLI(filePath string, blocksDir string, store storage.Storage) {
 	}
 
 }
+// btw i want t suicide

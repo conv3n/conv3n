@@ -6,6 +6,9 @@ type BlockType string
 const (
 	BlockTypeHTTPRequest BlockType = "std/http_request"
 	BlockTypeCustomCode  BlockType = "custom/code"
+	BlockTypeCondition   BlockType = "std/condition"
+	BlockTypeLoop        BlockType = "std/loop"
+	BlockTypeTransform   BlockType = "std/transform"
 )
 
 // BlockConfig holds the configuration for a block.

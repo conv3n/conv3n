@@ -1,0 +1,29 @@
+{
+    "id": "loop-demo",
+    "name": "Loop Demo Workflow",
+    "blocks": [
+        {
+            "id": "fetch_users",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://jsonplaceholder.typicode.com/users",
+                "method": "GET"
+            }
+        },
+        {
+            "id": "process_users",
+            "type": "std/loop",
+            "config": {
+                "items": "{{ $node.fetch_users.data }}",
+                "filterExpression": "item.id <= 3",
+                "mapExpression": "({ id: item.id, name: item.name, email: item.email })"
+            }
+        }
+    ],
+    "connections": [
+        {
+            "from": "fetch_users",
+            "to": "process_users"
+        }
+    ]
+}

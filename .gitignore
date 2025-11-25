@@ -1,5 +1,17 @@
-# Go (Backend)
-# Binaries
+# --- System & IDE ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# --- Go (Backend) ---
+# Binaries & Build
 /bin/
 /dist/
 *.exe
@@ -9,57 +21,54 @@
 *.dylib
 *.test
 *.out
-
-# The main binary name 
-/conv3n
 main
+/conv3n
 
 # Test coverage
 coverage.out
 coverage.html
 *.coverprofile
 
-# Go modules
+# Vendor
 vendor/
 
-# Bun / Node / TypeScript (Runtime)
+# --- Node / Bun / Web (Frontend & Runtime) ---
 node_modules/
+/web/node_modules/
+/web/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 .pnpm-debug.log*
 
+# Lockfiles - usually committed, but user added bun.lock to ignore previously.
+# I will COMMENT IT OUT so user can uncomment if desired, but default to committing.
+# bun.lock
 # bun.lockb
-# Database (SQLite) & State
+
+# --- Database & Data ---
 *.db
 *.db-journal
 *.sqlite
 *.sqlite3
 data/
 
-# Environment & Secrets
+# --- Environment & Secrets ---
 .env
 .env.local
 .env.*.local
 *.pem
 *.key
 
-# Runtime & Temporary Files
-tmp/
-temp/
+# --- Logs & Temp ---
 logs/
 *.log
+tmp/
+temp/
 
-# Test workflows (local testing only)
+# --- Misc / Testing ---
 test_workflow.json
 test_*.json
 *_test_workflow.json
-
-# IDE & System
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-*.swo
-bun.lock

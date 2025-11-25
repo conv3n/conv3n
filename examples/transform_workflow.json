@@ -1,0 +1,42 @@
+{
+    "id": "transform-demo",
+    "name": "Transform Demo Workflow",
+    "blocks": [
+        {
+            "id": "fetch_user",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://jsonplaceholder.typicode.com/users/1",
+                "method": "GET"
+            }
+        },
+        {
+            "id": "transform_user",
+            "type": "std/transform",
+            "config": {
+                "input": "{{ $node.fetch_user.data }}",
+                "operations": [
+                    {
+                        "type": "pick",
+                        "fields": [
+                            "id",
+                            "name",
+                            "email",
+                            "address"
+                        ]
+                    },
+                    {
+                        "type": "jsonpath",
+                        "query": "$.address.city"
+                    }
+                ]
+            }
+        }
+    ],
+    "connections": [
+        {
+            "from": "fetch_user",
+            "to": "transform_user"
+        }
+    ]
+}

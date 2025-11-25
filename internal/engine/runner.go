@@ -82,6 +82,15 @@ func (r *BunRunner) ExecuteBlock(ctx context.Context, block Block, input any) (a
 		// For custom code, use the custom/code.ts wrapper
 		// The user code is passed via the config.code field
 		scriptPath = filepath.Join(r.BlocksDir, "custom", "code.ts")
+	case BlockTypeCondition:
+		// For conditional branching, use the std/condition.ts block
+		scriptPath = filepath.Join(r.BlocksDir, "std", "condition.ts")
+	case BlockTypeLoop:
+		// For array iteration and mapping, use the std/loop.ts block
+		scriptPath = filepath.Join(r.BlocksDir, "std", "loop.ts")
+	case BlockTypeTransform:
+		// For data transformation, use the std/transform.ts block
+		scriptPath = filepath.Join(r.BlocksDir, "std", "transform.ts")
 	default:
 		return nil, fmt.Errorf("unknown block type: %s", block.Type)
 	}

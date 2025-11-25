@@ -1,0 +1,52 @@
+{
+    "id": "delay-chain-demo",
+    "name": "Delay Chain Demo",
+    "description": "Multiple delays with different units (ms and s)",
+    "nodes": [
+        {
+            "id": "delay1",
+            "type": "std/delay",
+            "config": {
+                "duration": 500,
+                "unit": "ms"
+            }
+        },
+        {
+            "id": "delay2",
+            "type": "std/delay",
+            "config": {
+                "duration": 1,
+                "unit": "s"
+            }
+        },
+        {
+            "id": "delay3",
+            "type": "std/delay",
+            "config": {
+                "duration": 300
+            }
+        },
+        {
+            "id": "final",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://httpbin.org/delay/0",
+                "method": "GET"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "from": "delay1",
+            "to": "delay2"
+        },
+        {
+            "from": "delay2",
+            "to": "delay3"
+        },
+        {
+            "from": "delay3",
+            "to": "final"
+        }
+    ]
+}

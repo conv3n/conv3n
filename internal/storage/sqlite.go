@@ -18,6 +18,15 @@ const (
 	ExecutionStatusFailed    ExecutionStatus = "failed"
 )
 
+// Workflow represents a stored workflow definition
+type Workflow struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Definition []byte    `json:"definition"` // Stores the full JSON (engine.Workflow)
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 // Execution represents a single workflow execution instance
 // This allows tracking history of all runs, not just the latest state
 type Execution struct {
@@ -34,6 +43,13 @@ type Execution struct {
 // Migration from workflow-state model to execution-history model
 // This allows tracking full execution history (like n8n)
 type Storage interface {
+	// Workflow Management
+	CreateWorkflow(ctx context.Context, workflow *Workflow) error
+	GetWorkflow(ctx context.Context, id string) (*Workflow, error)
+	UpdateWorkflow(ctx context.Context, workflow *Workflow) error
+	DeleteWorkflow(ctx context.Context, id string) error
+	ListWorkflows(ctx context.Context) ([]*Workflow, error)
+
 	// Execution Management - track history of all workflow runs
 	CreateExecution(ctx context.Context, workflowID string) (executionID string, err error)
 	UpdateExecutionStatus(ctx context.Context, executionID string, status ExecutionStatus, state []byte, errorMsg *string) error
@@ -73,6 +89,15 @@ func NewSQLite(dbPath string) (*SQLiteStorage, error) {
 // Migration from single-state model to full execution history
 func initSchema(db *sql.DB) error {
 	schema := `
+	-- Workflows: store workflow definitions
+	CREATE TABLE IF NOT EXISTS workflows (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		definition BLOB NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	-- Execution History: track all workflow runs (not just latest state)
 	-- Each workflow run gets a unique execution_id (UUID)
 	CREATE TABLE IF NOT EXISTS workflow_executions (
@@ -82,7 +107,8 @@ func initSchema(db *sql.DB) error {
 		state BLOB NOT NULL,
 		started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		completed_at DATETIME,
-		error TEXT
+		error TEXT,
+		FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
 	);
 
 	-- Index for querying execution history by workflow (most recent first)
@@ -108,6 +134,83 @@ func initSchema(db *sql.DB) error {
 	_, err := db.Exec(schema)
 	return err
 }
+
+// --- Workflow CRUD ---
+
+func (s *SQLiteStorage) CreateWorkflow(ctx context.Context, w *Workflow) error {
+	query := `
+		INSERT INTO workflows (id, name, definition, created_at, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`
+	_, err := s.db.ExecContext(ctx, query, w.ID, w.Name, w.Definition)
+	if err != nil {
+		return fmt.Errorf("failed to create workflow: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStorage) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
+	query := `SELECT id, name, definition, created_at, updated_at FROM workflows WHERE id = ?`
+	var w Workflow
+	err := s.db.QueryRowContext(ctx, query, id).Scan(&w.ID, &w.Name, &w.Definition, &w.CreatedAt, &w.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("workflow not found")
+		}
+		return nil, fmt.Errorf("failed to get workflow: %w", err)
+	}
+	return &w, nil
+}
+
+func (s *SQLiteStorage) UpdateWorkflow(ctx context.Context, w *Workflow) error {
+	query := `
+		UPDATE workflows 
+		SET name = ?, definition = ?, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = ?
+	`
+	res, err := s.db.ExecContext(ctx, query, w.Name, w.Definition, w.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update workflow: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("workflow not found")
+	}
+	return nil
+}
+
+func (s *SQLiteStorage) DeleteWorkflow(ctx context.Context, id string) error {
+	query := `DELETE FROM workflows WHERE id = ?`
+	_, err := s.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete workflow: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStorage) ListWorkflows(ctx context.Context) ([]*Workflow, error) {
+	query := `SELECT id, name, definition, created_at, updated_at FROM workflows ORDER BY updated_at DESC`
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workflows: %w", err)
+	}
+	defer rows.Close()
+
+	var workflows []*Workflow
+	for rows.Next() {
+		var w Workflow
+		if err := rows.Scan(&w.ID, &w.Name, &w.Definition, &w.CreatedAt, &w.UpdatedAt); err != nil {
+			return nil, err
+		}
+		workflows = append(workflows, &w)
+	}
+	return workflows, nil
+}
+
+// --- Execution Management ---
 
 // CreateExecution creates a new workflow execution instance
 // Returns a unique execution_id (UUID) for tracking this specific run

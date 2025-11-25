@@ -1,0 +1,41 @@
+{
+    "id": "delay-simple-demo",
+    "name": "Simple Delay Demo",
+    "description": "Demonstrates basic delay functionality with 2 second pause",
+    "nodes": [
+        {
+            "id": "start",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://httpbin.org/get",
+                "method": "GET"
+            }
+        },
+        {
+            "id": "wait",
+            "type": "std/delay",
+            "config": {
+                "duration": 2,
+                "unit": "s"
+            }
+        },
+        {
+            "id": "end",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://httpbin.org/get",
+                "method": "GET"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "from": "start",
+            "to": "wait"
+        },
+        {
+            "from": "wait",
+            "to": "end"
+        }
+    ]
+}
