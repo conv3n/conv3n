@@ -64,8 +64,11 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 	os.Chdir("../..")
 	defer os.Chdir(wd)
 
+	// We are now in project root. Blocks are in pkg/blocks
+	blocksDir := "pkg/blocks"
+
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx)
+	runner := engine.NewWorkflowRunner(ctx, blocksDir)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

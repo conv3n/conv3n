@@ -29,7 +29,9 @@ func TestBunRunner_Execute(t *testing.T) {
 		scriptPath = filepath.Join(cwd, "pkg/bunock/runner.ts")
 	}
 
-	runner := engine.NewBunRunner()
+	// For testing Execute directly, the blocksDir doesn't matter as much if we pass full path to Execute
+	// But NewBunRunner needs an arg now.
+	runner := engine.NewBunRunner(filepath.Dir(scriptPath))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

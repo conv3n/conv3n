@@ -13,9 +13,9 @@ type WorkflowRunner struct {
 }
 
 // NewWorkflowRunner creates a new runner for a specific execution context.
-func NewWorkflowRunner(ctx *ExecutionContext) *WorkflowRunner {
+func NewWorkflowRunner(ctx *ExecutionContext, blocksDir string) *WorkflowRunner {
 	return &WorkflowRunner{
-		bunRunner:    NewBunRunner(),
+		bunRunner:    NewBunRunner(blocksDir),
 		stateManager: NewStateManager(ctx),
 	}
 }
