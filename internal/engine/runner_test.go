@@ -29,7 +29,7 @@ func TestBunRunner_Execute(t *testing.T) {
 		scriptPath = filepath.Join(cwd, "pkg/bunock/runner.ts")
 	}
 
-	runner := engine.NewBunRunner(scriptPath)
+	runner := engine.NewBunRunner()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -38,7 +38,7 @@ func TestBunRunner_Execute(t *testing.T) {
 		"test": "data",
 	}
 
-	result, err := runner.Execute(ctx, input)
+	result, err := runner.Execute(ctx, scriptPath, input)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}

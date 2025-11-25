@@ -12,23 +12,20 @@ import (
 type BunRunner struct {
 	// RuntimePath is the path to the bun executable (usually "bun").
 	RuntimePath string
-	// ScriptPath is the path to the runner script (e.g., pkg/bunock/runner.ts).
-	ScriptPath string
 }
 
 // NewBunRunner creates a new runner instance.
-func NewBunRunner(scriptPath string) *BunRunner {
+func NewBunRunner() *BunRunner {
 	return &BunRunner{
 		RuntimePath: "bun",
-		ScriptPath:  scriptPath,
 	}
 }
 
 // Execute runs the configured Bun script with the provided input payload.
 // It writes the input to the subprocess's Stdin and reads the result from Stdout.
-func (r *BunRunner) Execute(ctx context.Context, input any) (any, error) {
+func (r *BunRunner) Execute(ctx context.Context, scriptPath string, input any) (any, error) {
 	// Prepare the command: bun run <script>
-	cmd := exec.CommandContext(ctx, r.RuntimePath, "run", r.ScriptPath)
+	cmd := exec.CommandContext(ctx, r.RuntimePath, "run", scriptPath)
 
 	// Setup pipes
 	stdin, err := cmd.StdinPipe()
@@ -51,7 +48,6 @@ func (r *BunRunner) Execute(ctx context.Context, input any) (any, error) {
 		defer stdin.Close()
 		if err := json.NewEncoder(stdin).Encode(input); err != nil {
 			// In a real app, we might want to log this or handle it better
-			// For now, if writing fails, the process will likely fail to read and exit
 		}
 	}()
 
@@ -67,4 +63,25 @@ func (r *BunRunner) Execute(ctx context.Context, input any) (any, error) {
 	}
 
 	return result, nil
+}
+
+// ExecuteBlock executes a specific block using the appropriate template.
+func (r *BunRunner) ExecuteBlock(ctx context.Context, block Block, input any) (any, error) {
+	var scriptPath string
+
+	// Determine script path based on block type
+	// TODO: Make this configurable/dynamic
+	switch block.Type {
+	case BlockTypeHTTPRequest:
+		// Assuming we are running from project root or binary location
+		// In production, this should be an absolute path to the assets folder
+		scriptPath = "pkg/blocks/std/http_request.ts"
+	case BlockTypeCustomCode:
+		// For custom code, we might use a generic runner that evals the code
+		return nil, fmt.Errorf("custom code not implemented yet")
+	default:
+		return nil, fmt.Errorf("unknown block type: %s", block.Type)
+	}
+
+	return r.Execute(ctx, scriptPath, input)
 }

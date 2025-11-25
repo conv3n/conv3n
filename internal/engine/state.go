@@ -1,0 +1,40 @@
+package engine
+
+import (
+	"fmt"
+)
+
+// StateManager handles the data flow between blocks.
+type StateManager struct {
+	ctx *ExecutionContext
+}
+
+func NewStateManager(ctx *ExecutionContext) *StateManager {
+	return &StateManager{ctx: ctx}
+}
+
+// SetResult saves the output of a block.
+func (sm *StateManager) SetResult(blockID string, result interface{}) {
+	sm.ctx.Results[blockID] = result
+}
+
+// GetResult retrieves the output of a block.
+func (sm *StateManager) GetResult(blockID string) interface{} {
+	return sm.ctx.Results[blockID]
+}
+
+// PrepareInput creates the input payload for a block, resolving any variables in the config.
+func (sm *StateManager) PrepareInput(block Block) (map[string]interface{}, error) {
+	// Resolve variables in the config
+	// We pass the entire Results map as the state
+	resolvedConfig, err := ResolveVariables(block.Config, sm.ctx.Results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve variables in config: %w", err)
+	}
+
+	return map[string]interface{}{
+		"config": resolvedConfig,
+		// We also pass the full context if the block needs it (e.g. custom code)
+		// "context": sm.ctx.Results,
+	}, nil
+}
