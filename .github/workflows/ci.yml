@@ -88,3 +88,44 @@ jobs:
 
     - name: Run Tests
       run: bun test
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test-and-build-go, test-bun]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Package Artifacts
+        run: |
+          for dir in dist/conv3n-linux-* dist/conv3n-darwin-* dist/conv3n-android-*; do
+            if [ -d "$dir" ]; then
+              (cd "$dir" && tar -czvf "../../${dir#dist/}.tar.gz" *)
+            fi
+          done
+          for dir in dist/conv3n-windows-*; do
+            if [ -d "$dir" ]; then
+              (cd "$dir" && zip "../../${dir#dist/}.zip" *)
+            fi
+          done
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            *.tar.gz
+            *.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
