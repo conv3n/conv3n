@@ -48,6 +48,11 @@ jobs:
     - name: Install dependencies
       run: go mod download
 
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
     - name: Run Tests (Linux only)
       if: matrix.goos == 'linux'
       run: go test -v ./...
