@@ -1,6 +1,6 @@
 module github.com/conv3n/conv3n
 
-go 1.25.4
+go 1.23.0
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
