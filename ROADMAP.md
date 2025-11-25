@@ -1,279 +1,303 @@
-# Дорожная карта CONV3N
+# CONV3N Roadmap
 
-> **Видение**: Самостоятельно размещаемая, no-code платформа для разработчиков. Молниеносно быстрая (Go + Bun), полностью open-source, без платных функций.
-
----
-
-## Фаза 1: Основа (ВЫПОЛНЕНО ✅)
-
-### Основной движок
-- [x] Оркестратор на Go с выполнением рабочих процессов
-- [x] Воркер на Bun для выполнения блоков
-- [x] Разрешитель переменных (`{{ $node.ID.data.field }}`)
-- [x] HTTP API сервер (`POST /api/run`, `GET /health`)
-- [x] Режим CLI (`conv3n run workflow.json`)
-- [x] Базовый блок: `std/http_request`
-
-**Статус**: MVP ядра функционален. Может выполнять рабочие процессы через API или CLI.
+> **Vision**: A self-hosted, no-code platform for developers. Blazingly fast (Go + Bun), fully open-source, no paid features.
 
 ---
 
-## Фаза 2: Библиотека блоков (Следующий приоритет)
+## Phase 1: Foundation (COMPLETED ✅)
 
-### Стандартные блоки
-Реализовать основные блоки для реальных рабочих процессов:
+### Core Engine
+- [x] Go Orchestrator with workflow execution
+- [x] Bun Worker for block execution
+- [x] Variable Resolver (`{{ $node.ID.data.field }}`)
+- [x] HTTP API Server (`POST /api/run`, `GET /health`)
+- [x] CLI Mode (`conv3n run workflow.json`)
+- [x] Basic Block: `std/http_request`
 
-- [ ] `std/transform` - Сопоставление и преобразование данных
-  - Запросы JSONPath
-  - Переименование/реструктуризация полей
-  - Преобразование типов
-- [ ] `std/condition` - Условное ветвление (if/else)
-  - Вычисление выражений
-  - Несколько путей вывода
-- [ ] `std/loop` - Итерация по массиву
-  - Отображение элементов
-  - Пакетная обработка
-- [ ] `std/delay` - Задержки по времени
-- [ ] `std/webhook` - Входящие HTTP вебхуки
-  - Динамическая генерация конечных точек
-  - Валидация полезной нагрузки
-- [ ] `std/database` - Операции с базами данных
-  - SQLite (основная)
-  - Коннекторы PostgreSQL/MySQL
-- [ ] `std/file` - Операции с файловой системой
-  - Чтение/запись файлов
-  - Операции с директориями
-
-### Пользовательский блок кода (УБИЙСТВЕННАЯ ФУНКЦИЯ) ✅
-- [x] `custom/code` - Пользовательский TypeScript/JavaScript
-  - Выполнение в среде Bun
-  - Типобезопасный ввод/вывод
-  - Поддержка импорта пакетов NPM (через dynamic import)
-  - Валидация синтаксиса (Bun.Transpiler)
-  - Обработка ошибок со стектрейсами (SyntaxError, RuntimeError, ImportError)
-
-**Цель**: Обеспечить 80% вариантов использования без пользовательского кода, 100% с ним.
+**Status**: Core MVP is functional. Can execute workflows via API or CLI.
 
 ---
 
-## Фаза 3: Тестирование и стабильность (В ПРОЦЕССЕ 🚧)
+## Phase 2: Block Library (Next Priority)
 
-### Модульные тесты
-- [x] Тесты ядра движка (`internal/engine`)
-  - Выполнение рабочего процесса
-  - Разрешение переменных
-  - Управление состоянием
-- [x] Тесты блоков (`pkg/blocks/std/*`)
-  - Каждый тип блока
-  - Сценарии ошибок
-- [x] Тесты API (`cmd/conv3n`)
-  - HTTP конечные точки
-  - Валидация запросов
+### Standard Blocks
+Implement essential blocks for real-world workflows:
 
-### Интеграционные тесты
-- [ ] Сквозные сценарии рабочих процессов
-- [ ] Бенчмарки производительности (сравнение с n8n)
-- [ ] Обнаружение утечек памяти
+- [ ] `std/transform` - Data mapping and transformation
+  - JSONPath queries
+  - Field renaming/restructuring
+  - Type conversion
+- [ ] `std/condition` - Conditional branching (if/else)
+  - Expression evaluation
+  - Multiple output paths
+- [ ] `std/loop` - Iterate over an array
+  - Item mapping
+  - Batch processing
+- [ ] `std/delay` - Time delays
+- [ ] `std/webhook` - Incoming HTTP webhooks
+  - Dynamic endpoint generation
+  - Payload validation
+- [ ] `std/database` - Database operations
+  - SQLite (core)
+  - PostgreSQL/MySQL connectors
+- [ ] `std/file` - File system operations
+  - Read/write files
+  - Directory operations
 
-**Цель**: 80%+ покрытие кода, ноль критических ошибок.
+### Custom Code Block (KILLER FEATURE) ✅
+- [x] `custom/code` - Custom TypeScript/JavaScript
+  - Execution in Bun environment
+  - Type-safe input/output
+  - NPM package import support (via dynamic import)
+  - Syntax validation (Bun.Transpiler)
+  - Error handling with stack traces (SyntaxError, RuntimeError, ImportError)
 
----
-
-## Фаза 4: Уровень хранения данных
-
-### Сохранение рабочих процессов
-- [ ] Схема базы данных SQLite
-  - Таблица рабочих процессов
-  - Таблица выполнений (история)
-  - Журналы выполнения
-- [ ] CRUD API для рабочих процессов
-  - `POST /api/workflows` - Создать
-  - `GET /api/workflows/:id` - Прочитать
-  - `PUT /api/workflows/:id` - Обновить
-  - `DELETE /api/workflows/:id` - Удалить
-- [ ] История выполнения
-  - Хранение результатов каждого выполнения
-  - Запрос прошлых запусков
-  - Повторный запуск неудачных выполнений
-
-### Конфигурация
-- [ ] Конфигурация на основе окружения
-- [ ] Поддержка нескольких окружений (dev/staging/prod)
-
-**Цель**: Постоянные рабочие процессы, история выполнения, готовое к производству хранилище.
+**Goal**: Cover 80% of use cases without custom code, 100% with it.
 
 ---
 
-## Фаза 5: UI (Веб-интерфейс)
+## Phase 3: Testing & Stability (IN PROGRESS 🚧)
 
-### Минимальный UI (v0.1)
-- [ ] Простая веб-форма для отправки JSON рабочего процесса
-- [ ] Отображение результатов выполнения
-- [ ] Просмотр списка рабочих процессов
+### Unit Tests
+- [x] Core engine tests (`internal/engine`)
+  - Workflow execution
+  - Variable resolution
+  - State management
+- [x] Block tests (`pkg/blocks/std/*`)
+  - Each block type
+  - Error scenarios
+- [x] API tests (`cmd/conv3n`)
+  - HTTP endpoints
+  - Request validation
 
-### Визуальный редактор (v1.0)
-- [ ] Конструктор рабочих процессов с перетаскиванием
-  - React Flow или аналогичная библиотека
-  - Палитра блоков
-  - Рисование соединений
-- [ ] Панель конфигурации блоков
-  - Динамические формы на основе типа блока
-  - Выбор переменных (`{{ $node.* }}`)
-- [ ] Предварительный просмотр выполнения в реальном времени
-  - Пошаговый просмотр выполнения
-  - Инспекция данных для каждого блока
-- [ ] Редактор кода для пользовательских блоков
-  - Monaco Editor (движок VSCode)
-  - Подсветка синтаксиса TypeScript
-  - Автодополнение
+### Integration Tests
+- [ ] End-to-end workflow scenarios
+- [ ] Performance benchmarks (vs. n8n)
+- [ ] Memory leak detection
 
-### Функции UX
-- [ ] Темный режим (по умолчанию)
-- [ ] Горячие клавиши
-- [ ] Отмена/Повтор
-- [ ] Галерея шаблонов рабочих процессов
-
-**Цель**: Интуитивно понятный UI, который не снижает мощность.
+**Goal**: 80%+ code coverage, zero critical bugs.
 
 ---
 
-## Фаза 6: Расширенные функции
+## Phase 4: Persistence Layer
 
-### Движок выполнения
-- [ ] Параллельное выполнение (на основе DAG)
-  - Топологическая сортировка
-  - Параллельное выполнение блоков
-- [ ] Стратегии обработки ошибок
-  - Повторный запуск с экспоненциальной задержкой
-  - Резервные блоки
-  - Границы ошибок
-- [ ] Триггеры
-  - Расписания Cron
-  - Триггеры вебхуков
-  - Наблюдатели файлов
+### Persistence Tech Stack
+> **Decision**: Using `modernc.org/sqlite` (Pure Go, no CGO) for MVP.
+> **Future**: Migrate to BadgerDB as load increases and project stabilizes.
 
-### Опыт разработчика
-- [ ] Валидация рабочего процесса CLI (`conv3n validate workflow.json`)
-- [ ] Фреймворк для тестирования рабочих процессов
-- [ ] Режим отладки с точками останова
-- [ ] Профилирование производительности
+**Rationale for modernc.org/sqlite:**
+- ✅ Pure Go - cross-compilation without dependencies (Windows/Linux/macOS)
+- ✅ No CGO - simple builds, fast CI/CD
+- ✅ Familiar SQL - easy debugging and data migration
+- ✅ Stability - proven technology for MVP
 
-### Интеграции
-- [ ] Предварительно созданные коннекторы
+**Migration path to BadgerDB:**
+- Abstract Storage Layer (`Storage` interface)
+- Swap implementation without business logic refactoring
+- Transition when performance bottlenecks appear
+
+### Workflow Persistence
+- [ ] SQLite database schema (`modernc.org/sqlite`)
+  - Workflows table
+  - Executions table (history)
+  - Execution logs
+- [ ] Storage Layer abstraction for future BadgerDB migration
+  - `Storage` interface with CRUD methods
+  - SQLite implementation (`storage.NewSQLite()`)
+  - Readiness for replacement with `storage.NewBadger()`
+- [ ] CRUD API for workflows
+  - `POST /api/workflows` - Create
+  - `GET /api/workflows/:id` - Read
+  - `PUT /api/workflows/:id` - Update
+  - `DELETE /api/workflows/:id` - Delete
+- [ ] Execution History
+  - Store results of each execution
+  - Query past runs
+  - Re-run failed executions
+
+### Configuration
+- [ ] Environment-based configuration
+- [ ] Multiple environment support (dev/staging/prod)
+
+**Goal**: Persistent workflows, execution history, production-ready storage.
+**Strategy**: Start with SQLite (simplicity), migrate to BadgerDB (performance) as it grows.
+
+---
+
+## Phase 5: UI (Web Interface)
+
+### Minimal UI (v0.1)
+- [ ] Simple web form to submit a JSON workflow
+- [ ] Display execution results
+- [ ] View list of workflows
+
+### Visual Editor (v1.0)
+- [ ] Drag-and-drop workflow builder
+  - React Flow or similar library
+  - Block palette
+  - Connection drawing
+- [ ] Block configuration panel
+  - Dynamic forms based on block type
+  - Variable selection (`{{ $node.* }}`)
+- [ ] Real-time execution preview
+  - Step-by-step execution walkthrough
+  - Data inspection for each block
+- [ ] Code editor for custom blocks
+  - Monaco Editor (VSCode engine)
+  - TypeScript syntax highlighting
+  - Autocompletion
+
+### UX Features
+- [ ] Dark mode (default)
+- [ ] Keyboard shortcuts
+- [ ] Undo/Redo
+- [ ] Workflow template gallery
+
+**Goal**: An intuitive UI that doesn't compromise power.
+
+---
+
+## Phase 6: Advanced Features
+
+### Execution Engine
+- [ ] Parallel execution (DAG-based)
+  - Topological sort
+  - Concurrent block execution
+- [ ] Error handling strategies
+  - Exponential backoff retries
+  - Fallback blocks
+  - Error boundaries
+- [ ] Triggers
+  - Cron schedules
+  - Webhook triggers
+  - File watchers
+
+### Developer Experience
+- [ ] CLI workflow validation (`conv3n validate workflow.json`)
+- [ ] Workflow testing framework
+- [ ] Debug mode with breakpoints
+- [ ] Performance profiling
+
+### Integrations
+- [ ] Pre-built connectors
   - GitHub API
   - Telegram Bot API
   - Discord webhooks
   - Stripe API
   - OpenAI API
-- [ ] Система плагинов для пользовательских интеграций
+- [ ] Plugin system for custom integrations
 
-**Цель**: Паритет функций с n8n, но быстрее и бесплатно.
-
----
-
-## Фаза 7: Готовность к производству
-
-### Развертывание
-- [ ] Образ Docker
-- [ ] Настройка Docker Compose
-- [ ] Манифесты Kubernetes
-- [ ] Скрипты развертывания в один клик (Railway, Fly.io)
-
-### Безопасность
-- [ ] Аутентификация API (JWT)
-- [ ] Контроль доступа на основе ролей (RBAC)
-- [ ] Управление секретами (зашифрованные переменные окружения)
-- [ ] Ограничение скорости запросов
-
-### Мониторинг
-- [ ] Метрики Prometheus
-- [ ] Проверки работоспособности
-- [ ] Логирование (структурированные JSON логи)
-- [ ] Оповещения
-
-### Документация
-- [ ] Руководство по началу работы
-- [ ] Документация по блокам
-- [ ] Документация API (OpenAPI/Swagger)
-- [ ] Видеоуроки
-
-**Цель**: Производственная, саморазмещаемая платформа.
+**Goal**: Feature parity with n8n, but faster and free.
 
 ---
 
-## Фаза 8: Сообщество и рост
+## Phase 7: Production Readiness
 
-### Открытый исходный код
-- [ ] Настройка репозитория GitHub
-  - README с убийственной демонстрацией
-  - Руководство по участию
-  - Кодекс поведения
-- [ ] Лицензия: MIT или Apache 2.0
-- [ ] Автоматизация журнала изменений
+### Deployment
+- [ ] Docker image
+- [ ] Docker Compose setup
+- [ ] Kubernetes manifests
+- [ ] One-click deployment scripts (Railway, Fly.io)
 
-### Маркетинг
-- [ ] Публикации в Telegram-канале
-- [ ] Обращение к техническим микро-инфлюенсерам (1k+ подписчиков)
-- [ ] Запуск на Hacker News
-- [ ] Статьи на Dev.to / Hashnode
-- [ ] Сравнительные бенчмарки (CONV3N против n8n)
+### Security
+- [ ] API authentication (JWT)
+- [ ] Role-Based Access Control (RBAC)
+- [ ] Secrets management (encrypted environment variables)
+- [ ] Request rate limiting
 
-### Сообщество
-- [ ] Discord-сервер
-- [ ] Обсуждения на GitHub
-- [ ] Репозиторий примеров рабочих процессов
-- [ ] Вклады сообщества в блоки
+### Monitoring
+- [ ] Prometheus metrics
+- [ ] Health checks
+- [ ] Logging (structured JSON logs)
+- [ ] Alerting
 
-**Цель**: Создать сообщество опытных пользователей и контрибьюторов.
+### Documentation
+- [ ] Getting Started Guide
+- [ ] Block documentation
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] Video tutorials
 
----
-
-## Будущие идеи (Бэклог)
-
-- [ ] Мобильное приложение (React Native) для мониторинга
-- [ ] Блок AI (интеграция GPT-4, Claude)
-- [ ] Визуальный отладчик данных
-- [ ] Маркетплейс рабочих процессов (шаблоны сообщества)
-- [ ] Многопользовательский режим (опционально, для компаний)
-- [ ] Совместная работа в реальном времени (многопользовательское редактирование)
-- [ ] Версионирование рабочих процессов (как Git)
+**Goal**: A production-ready, self-hostable platform.
 
 ---
 
-## Метрики успеха
+## Phase 8: Community & Growth
 
-### Технические
-- Скорость выполнения: в 5 раз быстрее, чем n8n
-- Использование памяти: <100 МБ для типичных рабочих процессов
-- Время запуска: <1 с
+### Open Source
+- [ ] GitHub repository setup
+  - README with a killer demo
+  - Contribution guide
+  - Code of Conduct
+- [ ] License: MIT or Apache 2.0
+- [ ] Changelog automation
 
-### Принятие
-- 1 000 звезд на GitHub за первые 6 месяцев
-- 100 активных саморазмещенных экземпляров
-- 10 контрибьюторов из сообщества
+### Marketing
+- [ ] Telegram channel posts
+- [ ] Outreach to tech micro-influencers (1k+ followers)
+- [ ] Hacker News launch
+- [ ] Dev.to / Hashnode articles
+- [ ] Comparative benchmarks (CONV3N vs. n8n)
 
-### Признание
-- Попадание на главную страницу Hacker News
-- Упоминание в рассылках для разработчиков
-- Кейсы от реальных пользователей
+### Community
+- [ ] Discord server
+- [ ] GitHub Discussions
+- [ ] Example workflows repository
+- [ ] Community contributions to blocks
 
----
-
-## Текущий статус
-
-**Мы здесь**: Фаза 3 - Тестирование и стабильность
-**Следующая веха**: Фаза 3 - Интеграционные тесты, затем Фаза 4 - Уровень хранения данных
-**Примерное время до v1.0**: 2-4 месяца (разработка в одиночку)
-
----
-
-## Примечания
-
-- **Никаких платных функций, никогда.** Это проект сообщества.
-- **Нет кошелька для пожертвований.** Признание > деньги.
-- **Модульная архитектура.** Проприетарные модули zxink могут быть загружены отдельно.
-- **В первую очередь для разработчиков.** Если это не быстро и не мощно, это не стоит строить.
+**Goal**: Build a community of power users and contributors.
 
 ---
 
-*Последнее обновление: 2025-11-25*
+## Future Ideas (Backlog)
+
+- [ ] Mobile app (React Native) for monitoring
+- [ ] AI block (GPT-4, Claude integration)
+- [ ] Visual data debugger
+- [ ] Workflow marketplace (community templates)
+- [ ] Multi-tenancy (optional, for businesses)
+- [ ] Real-time collaboration (multi-user editing)
+- [ ] Workflow versioning (like Git)
+
+---
+
+## Success Metrics
+
+### Technical
+- Execution speed: 5x faster than n8n
+- Memory usage: <100MB for typical workflows
+- Startup time: <1s
+
+### Adoption
+- 1,000 GitHub stars within the first 6 months
+- 100 active self-hosted instances
+- 10 community contributors
+
+### Recognition
+- Featured on Hacker News front page
+- Mentioned in developer newsletters
+- Case studies from real users
+
+---
+
+## Current Status
+
+**We are here**: Phase 3 - Testing & Stability
+**Next milestone**: Phase 3 - Integration Tests, then Phase 4 - Persistence Layer
+**Estimated time to v1.0**: 2-4 months (solo development)
+
+---
+
+## Notes
+
+- **No paid features, ever.** This is a community project.
+- **No donation wallet.** Recognition > money.
+- **Modular architecture.** Proprietary zxink modules can be loaded separately.
+- **Developer-first.** If it's not fast and powerful, it's not worth building.
+
+---
+
+*Last updated: 2025-11-25*
+
+### Technical Decisions
+- **SQLite driver**: `modernc.org/sqlite` (Pure Go, no CGO)
+- **Future DB**: BadgerDB (after stabilization and user growth)
