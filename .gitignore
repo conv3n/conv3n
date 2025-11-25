@@ -14,6 +14,11 @@
 conv3n
 main
 
+# Test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
 # Go modules
 vendor/
 
@@ -45,6 +50,11 @@ tmp/
 temp/
 logs/
 *.log
+
+# Test workflows (local testing only)
+test_workflow.json
+test_*.json
+*_test_workflow.json
 
 # IDE & System
 .DS_Store
