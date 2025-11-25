@@ -297,6 +297,7 @@ Implement essential blocks for real-world workflows:
 - ✅ Fixed flaky tests using `t.TempDir()` for test isolation
 - ✅ Migrated from workflow-state model to execution-history model
 - ✅ Implemented full execution tracking with status and error logging
+- ✅ Integrated Storage with Workflow Engine & CLI (auto-save history)
 - ✅ All tests pass with parallel execution and race detector
 
 ---

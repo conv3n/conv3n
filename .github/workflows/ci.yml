@@ -1,0 +1,85 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-build-go:
+    name: Go Build & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            goos: linux
+            goarch: amd64
+          - os: windows
+            arch: amd64
+            goos: windows
+            goarch: amd64
+            ext: .exe
+          - os: darwin
+            arch: amd64
+            goos: darwin
+            goarch: amd64
+          - os: darwin
+            arch: arm64
+            goos: darwin
+            goarch: arm64
+          - os: android
+            arch: arm64
+            goos: android
+            goarch: arm64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+        cache: true
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Run Tests (Linux only)
+      if: matrix.goos == 'linux'
+      run: go test -v ./...
+
+    - name: Build
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        mkdir -p dist
+        go build -v -o dist/conv3n-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/conv3n
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: conv3n-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: dist/*
+
+  test-bun:
+    name: Bun Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    - name: Install dependencies
+      run: bun install
+
+    - name: Run Tests
+      run: bun test

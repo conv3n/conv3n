@@ -30,7 +30,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # bun.lockb
-
 # Database (SQLite) & State
 *.db
 *.db-journal

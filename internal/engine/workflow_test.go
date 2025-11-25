@@ -6,17 +6,36 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/conv3n/conv3n/internal/engine"
+	"github.com/conv3n/conv3n/internal/storage"
 )
+
+func createTestStorage(t *testing.T) storage.Storage {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	store, err := storage.NewSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test storage: %v", err)
+	}
+	// Note: We don't close store here because it needs to be used by the runner.
+	// In a real test we might want to ensure it's closed, but for these unit tests
+	// relying on t.TempDir cleanup is sufficient for the file, though closing connections is better.
+	t.Cleanup(func() {
+		store.Close()
+	})
+	return store
+}
 
 // TestNewWorkflowRunner verifies WorkflowRunner initialization
 func TestNewWorkflowRunner(t *testing.T) {
 	ctx := engine.NewExecutionContext("test-workflow")
 	blocksDir := "/test/blocks"
-	runner := engine.NewWorkflowRunner(ctx, blocksDir)
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, blocksDir, store)
 
 	if runner == nil {
 		t.Fatal("NewWorkflowRunner returned nil")
@@ -33,7 +52,8 @@ func TestWorkflowRunner_Run_EmptyWorkflow(t *testing.T) {
 	}
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, "/tmp")
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, "/tmp", store)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -80,7 +100,8 @@ func TestWorkflowRunner_Run_SingleBlock(t *testing.T) {
 	defer os.Chdir(wd)
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks", store)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -144,7 +165,8 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 	blocksDir := "pkg/blocks"
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, blocksDir)
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, blocksDir, store)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -199,7 +221,8 @@ func TestWorkflowRunner_Run_ErrorInBlock(t *testing.T) {
 	defer os.Chdir(wd)
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks", store)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -263,7 +286,8 @@ func TestWorkflowRunner_Run_SequentialExecution(t *testing.T) {
 	defer os.Chdir(wd)
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+	store := createTestStorage(t)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks", store)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

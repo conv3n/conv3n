@@ -2,6 +2,8 @@ package engine_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,12 +80,20 @@ func TestBunRunner_ExecuteBlock_HTTPRequest(t *testing.T) {
 
 	runner := engine.NewBunRunner(blocksDir)
 
+	// Setup mock HTTP server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message": "success", "origin": "127.0.0.1"}`))
+	}))
+	defer ts.Close()
+
 	// Create a simple HTTP request block
 	block := engine.Block{
 		ID:   "test-http",
 		Type: engine.BlockTypeHTTPRequest,
 		Config: map[string]interface{}{
-			"url":    "https://httpbin.org/get",
+			"url":    ts.URL,
 			"method": "GET",
 		},
 	}

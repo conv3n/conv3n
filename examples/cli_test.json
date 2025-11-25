@@ -1,0 +1,15 @@
+{
+    "id": "cli-test-workflow",
+    "name": "CLI Test Workflow",
+    "blocks": [
+        {
+            "id": "block-1",
+            "type": "std/http_request",
+            "config": {
+                "url": "https://httpbin.org/get",
+                "method": "GET"
+            }
+        }
+    ],
+    "connections": []
+}
