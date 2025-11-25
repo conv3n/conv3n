@@ -11,7 +11,7 @@
 *.out
 
 # The main binary name 
-conv3n
+/conv3n
 main
 
 # Test coverage
