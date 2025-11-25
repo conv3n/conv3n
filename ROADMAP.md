@@ -1,279 +1,279 @@
-# CONV3N Roadmap
+# Дорожная карта CONV3N
 
-> **Vision**: Self-hosted, no-code platform for hardcore developers. Blazing fast (Go + Bun), fully open-source, zero paid features.
-
----
-
-## Phase 1: Foundation (DONE ✅)
-
-### Core Engine
-- [x] Go orchestrator with workflow execution
-- [x] Bun worker for block execution
-- [x] Variable resolver (`{{ $node.ID.data.field }}`)
-- [x] HTTP API server (`POST /api/run`, `GET /health`)
-- [x] CLI mode (`conv3n run workflow.json`)
-- [x] Basic block: `std/http_request`
-
-**Status**: MVP core is functional. Can execute workflows via API or CLI.
+> **Видение**: Самостоятельно размещаемая, no-code платформа для хардкорных разработчиков. Молниеносно быстрая (Go + Bun), полностью open-source, без платных функций.
 
 ---
 
-## Phase 2: Block Library (Next Priority)
+## Фаза 1: Основа (ВЫПОЛНЕНО ✅)
 
-### Standard Blocks
-Implement essential blocks for real-world workflows:
+### Основной движок
+- [x] Оркестратор на Go с выполнением рабочих процессов
+- [x] Воркер на Bun для выполнения блоков
+- [x] Разрешитель переменных (`{{ $node.ID.data.field }}`)
+- [x] HTTP API сервер (`POST /api/run`, `GET /health`)
+- [x] Режим CLI (`conv3n run workflow.json`)
+- [x] Базовый блок: `std/http_request`
 
-- [ ] `std/transform` - Data mapping and transformation
-  - JSONPath queries
-  - Field renaming/restructuring
-  - Type conversion
-- [ ] `std/condition` - Conditional branching (if/else)
-  - Expression evaluation
-  - Multiple output paths
-- [ ] `std/loop` - Array iteration
-  - Map over items
-  - Batch processing
-- [ ] `std/delay` - Time-based delays
-- [ ] `std/webhook` - Incoming HTTP webhooks
-  - Dynamic endpoint generation
-  - Payload validation
-- [ ] `std/database` - Database operations
-  - SQLite (primary)
-  - PostgreSQL/MySQL connectors
-- [ ] `std/file` - File system operations
-  - Read/Write files
-  - Directory operations
-
-### Custom Code Block (KILLER FEATURE)
-- [ ] `custom/code` - User-defined TypeScript/JavaScript
-  - Bun runtime execution
-  - Type-safe input/output
-  - NPM package imports support
-  - Syntax validation
-  - Error handling with stack traces
-
-**Goal**: Enable 80% of use-cases without custom code, 100% with it.
+**Статус**: MVP ядра функционален. Может выполнять рабочие процессы через API или CLI.
 
 ---
 
-## Phase 3: Testing & Stability
+## Фаза 2: Библиотека блоков (Следующий приоритет)
 
-### Unit Tests
-- [ ] Engine core tests (`internal/engine`)
-  - Workflow execution
-  - Variable resolution
-  - State management
-- [ ] Block tests (`pkg/blocks/std/*`)
-  - Each block type
-  - Error scenarios
-- [ ] API tests (`cmd/conv3n`)
-  - HTTP endpoints
-  - Request validation
+### Стандартные блоки
+Реализовать основные блоки для реальных рабочих процессов:
 
-### Integration Tests
-- [ ] End-to-end workflow scenarios
-- [ ] Performance benchmarks (compare with n8n)
-- [ ] Memory leak detection
+- [ ] `std/transform` - Сопоставление и преобразование данных
+  - Запросы JSONPath
+  - Переименование/реструктуризация полей
+  - Преобразование типов
+- [ ] `std/condition` - Условное ветвление (if/else)
+  - Вычисление выражений
+  - Несколько путей вывода
+- [ ] `std/loop` - Итерация по массиву
+  - Отображение элементов
+  - Пакетная обработка
+- [ ] `std/delay` - Задержки по времени
+- [ ] `std/webhook` - Входящие HTTP вебхуки
+  - Динамическая генерация конечных точек
+  - Валидация полезной нагрузки
+- [ ] `std/database` - Операции с базами данных
+  - SQLite (основная)
+  - Коннекторы PostgreSQL/MySQL
+- [ ] `std/file` - Операции с файловой системой
+  - Чтение/запись файлов
+  - Операции с директориями
 
-**Goal**: 80%+ code coverage, zero critical bugs.
+### Пользовательский блок кода (УБИЙСТВЕННАЯ ФУНКЦИЯ)
+- [ ] `custom/code` - Пользовательский TypeScript/JavaScript
+  - Выполнение в среде Bun
+  - Типобезопасный ввод/вывод
+  - Поддержка импорта пакетов NPM
+  - Валидация синтаксиса
+  - Обработка ошибок со стектрейсами
 
----
-
-## Phase 4: Storage Layer
-
-### Workflow Persistence
-- [ ] SQLite database schema
-  - Workflows table
-  - Executions table (history)
-  - Execution logs
-- [ ] CRUD API for workflows
-  - `POST /api/workflows` - Create
-  - `GET /api/workflows/:id` - Read
-  - `PUT /api/workflows/:id` - Update
-  - `DELETE /api/workflows/:id` - Delete
-- [ ] Execution history
-  - Store results per execution
-  - Query past runs
-  - Retry failed executions
-
-### Configuration
-- [ ] Environment-based config
-- [ ] Multi-environment support (dev/staging/prod)
-
-**Goal**: Persistent workflows, execution history, production-ready storage.
+**Цель**: Обеспечить 80% вариантов использования без пользовательского кода, 100% с ним.
 
 ---
 
-## Phase 5: UI (Web Interface)
+## Фаза 3: Тестирование и стабильность
 
-### Minimal UI (v0.1)
-- [ ] Simple web form for JSON workflow submission
-- [ ] Execution results display
-- [ ] Workflow list view
+### Модульные тесты
+- [ ] Тесты ядра движка (`internal/engine`)
+  - Выполнение рабочего процесса
+  - Разрешение переменных
+  - Управление состоянием
+- [ ] Тесты блоков (`pkg/blocks/std/*`)
+  - Каждый тип блока
+  - Сценарии ошибок
+- [ ] Тесты API (`cmd/conv3n`)
+  - HTTP конечные точки
+  - Валидация запросов
 
-### Visual Editor (v1.0)
-- [ ] Drag-and-drop workflow builder
-  - React Flow or similar library
-  - Block palette
-  - Connection drawing
-- [ ] Block configuration panel
-  - Dynamic forms based on block type
-  - Variable picker (`{{ $node.* }}`)
-- [ ] Live execution preview
-  - Step-by-step execution view
-  - Data inspection per block
-- [ ] Code editor for custom blocks
-  - Monaco Editor (VSCode engine)
-  - TypeScript syntax highlighting
-  - Auto-completion
+### Интеграционные тесты
+- [ ] Сквозные сценарии рабочих процессов
+- [ ] Бенчмарки производительности (сравнение с n8n)
+- [ ] Обнаружение утечек памяти
 
-### UX Features
-- [ ] Dark mode (default)
-- [ ] Keyboard shortcuts
-- [ ] Undo/Redo
-- [ ] Workflow templates gallery
-
-**Goal**: Intuitive UI that doesn't compromise power.
+**Цель**: 80%+ покрытие кода, ноль критических ошибок.
 
 ---
 
-## Phase 6: Advanced Features
+## Фаза 4: Уровень хранения данных
 
-### Execution Engine
-- [ ] Parallel execution (DAG-based)
-  - Topological sort
-  - Concurrent block execution
-- [ ] Error handling strategies
-  - Retry with backoff
-  - Fallback blocks
-  - Error boundaries
-- [ ] Triggers
-  - Cron schedules
-  - Webhook triggers
-  - File watchers
+### Сохранение рабочих процессов
+- [ ] Схема базы данных SQLite
+  - Таблица рабочих процессов
+  - Таблица выполнений (история)
+  - Журналы выполнения
+- [ ] CRUD API для рабочих процессов
+  - `POST /api/workflows` - Создать
+  - `GET /api/workflows/:id` - Прочитать
+  - `PUT /api/workflows/:id` - Обновить
+  - `DELETE /api/workflows/:id` - Удалить
+- [ ] История выполнения
+  - Хранение результатов каждого выполнения
+  - Запрос прошлых запусков
+  - Повторный запуск неудачных выполнений
 
-### Developer Experience
-- [ ] CLI workflow validation (`conv3n validate workflow.json`)
-- [ ] Workflow testing framework
-- [ ] Debug mode with breakpoints
-- [ ] Performance profiling
+### Конфигурация
+- [ ] Конфигурация на основе окружения
+- [ ] Поддержка нескольких окружений (dev/staging/prod)
 
-### Integrations
-- [ ] Pre-built connectors
+**Цель**: Постоянные рабочие процессы, история выполнения, готовое к производству хранилище.
+
+---
+
+## Фаза 5: UI (Веб-интерфейс)
+
+### Минимальный UI (v0.1)
+- [ ] Простая веб-форма для отправки JSON рабочего процесса
+- [ ] Отображение результатов выполнения
+- [ ] Просмотр списка рабочих процессов
+
+### Визуальный редактор (v1.0)
+- [ ] Конструктор рабочих процессов с перетаскиванием
+  - React Flow или аналогичная библиотека
+  - Палитра блоков
+  - Рисование соединений
+- [ ] Панель конфигурации блоков
+  - Динамические формы на основе типа блока
+  - Выбор переменных (`{{ $node.* }}`)
+- [ ] Предварительный просмотр выполнения в реальном времени
+  - Пошаговый просмотр выполнения
+  - Инспекция данных для каждого блока
+- [ ] Редактор кода для пользовательских блоков
+  - Monaco Editor (движок VSCode)
+  - Подсветка синтаксиса TypeScript
+  - Автодополнение
+
+### Функции UX
+- [ ] Темный режим (по умолчанию)
+- [ ] Горячие клавиши
+- [ ] Отмена/Повтор
+- [ ] Галерея шаблонов рабочих процессов
+
+**Цель**: Интуитивно понятный UI, который не снижает мощность.
+
+---
+
+## Фаза 6: Расширенные функции
+
+### Движок выполнения
+- [ ] Параллельное выполнение (на основе DAG)
+  - Топологическая сортировка
+  - Параллельное выполнение блоков
+- [ ] Стратегии обработки ошибок
+  - Повторный запуск с экспоненциальной задержкой
+  - Резервные блоки
+  - Границы ошибок
+- [ ] Триггеры
+  - Расписания Cron
+  - Триггеры вебхуков
+  - Наблюдатели файлов
+
+### Опыт разработчика
+- [ ] Валидация рабочего процесса CLI (`conv3n validate workflow.json`)
+- [ ] Фреймворк для тестирования рабочих процессов
+- [ ] Режим отладки с точками останова
+- [ ] Профилирование производительности
+
+### Интеграции
+- [ ] Предварительно созданные коннекторы
   - GitHub API
   - Telegram Bot API
   - Discord webhooks
   - Stripe API
   - OpenAI API
-- [ ] Plugin system for custom integrations
+- [ ] Система плагинов для пользовательских интеграций
 
-**Goal**: Feature parity with n8n, but faster and free.
-
----
-
-## Phase 7: Production Readiness
-
-### Deployment
-- [ ] Docker image
-- [ ] Docker Compose setup
-- [ ] Kubernetes manifests
-- [ ] One-click deploy scripts (Railway, Fly.io)
-
-### Security
-- [ ] API authentication (JWT)
-- [ ] Role-based access control (RBAC)
-- [ ] Secrets management (encrypted env vars)
-- [ ] Rate limiting
-
-### Monitoring
-- [ ] Prometheus metrics
-- [ ] Health checks
-- [ ] Logging (structured JSON logs)
-- [ ] Alerting
-
-### Documentation
-- [ ] Getting Started guide
-- [ ] Block reference docs
-- [ ] API documentation (OpenAPI/Swagger)
-- [ ] Video tutorials
-
-**Goal**: Production-grade, self-hostable platform.
+**Цель**: Паритет функций с n8n, но быстрее и бесплатно.
 
 ---
 
-## Phase 8: Community & Growth
+## Фаза 7: Готовность к производству
 
-### Open Source
-- [ ] GitHub repository setup
-  - README with killer demo
-  - Contributing guidelines
-  - Code of conduct
-- [ ] License: MIT or Apache 2.0
-- [ ] Changelog automation
+### Развертывание
+- [ ] Образ Docker
+- [ ] Настройка Docker Compose
+- [ ] Манифесты Kubernetes
+- [ ] Скрипты развертывания в один клик (Railway, Fly.io)
 
-### Marketing
-- [ ] Telegram channel posts
-- [ ] Reach out to tech micro-influencers (1k+ subs)
-- [ ] Hacker News launch
-- [ ] Dev.to / Hashnode articles
-- [ ] Comparison benchmarks (CONV3N vs n8n)
+### Безопасность
+- [ ] Аутентификация API (JWT)
+- [ ] Контроль доступа на основе ролей (RBAC)
+- [ ] Управление секретами (зашифрованные переменные окружения)
+- [ ] Ограничение скорости запросов
 
-### Community
-- [ ] Discord server
-- [ ] GitHub Discussions
-- [ ] Example workflows repository
-- [ ] Community block contributions
+### Мониторинг
+- [ ] Метрики Prometheus
+- [ ] Проверки работоспособности
+- [ ] Логирование (структурированные JSON логи)
+- [ ] Оповещения
 
-**Goal**: Build a community of power users and contributors.
+### Документация
+- [ ] Руководство по началу работы
+- [ ] Документация по блокам
+- [ ] Документация API (OpenAPI/Swagger)
+- [ ] Видеоуроки
 
----
-
-## Future Ideas (Backlog)
-
-- [ ] Mobile app (React Native) for monitoring
-- [ ] AI block (GPT-4, Claude integration)
-- [ ] Visual data debugger
-- [ ] Workflow marketplace (community templates)
-- [ ] Multi-tenant mode (optional, for companies)
-- [ ] Real-time collaboration (multiplayer editing)
-- [ ] Workflow versioning (Git-like)
+**Цель**: Производственная, саморазмещаемая платформа.
 
 ---
 
-## Success Metrics
+## Фаза 8: Сообщество и рост
 
-### Technical
-- Execution speed: 5x faster than n8n
-- Memory usage: <100MB for typical workflows
-- Startup time: <1s
+### Открытый исходный код
+- [ ] Настройка репозитория GitHub
+  - README с убийственной демонстрацией
+  - Руководство по участию
+  - Кодекс поведения
+- [ ] Лицензия: MIT или Apache 2.0
+- [ ] Автоматизация журнала изменений
 
-### Adoption
-- 1,000 GitHub stars in first 6 months
-- 100 active self-hosted instances
-- 10 community contributors
+### Маркетинг
+- [ ] Публикации в Telegram-канале
+- [ ] Обращение к техническим микро-инфлюенсерам (1k+ подписчиков)
+- [ ] Запуск на Hacker News
+- [ ] Статьи на Dev.to / Hashnode
+- [ ] Сравнительные бенчмарки (CONV3N против n8n)
 
-### Recognition
-- Featured on Hacker News front page
-- Mentioned in developer newsletters
-- Case studies from real users
+### Сообщество
+- [ ] Discord-сервер
+- [ ] Обсуждения на GitHub
+- [ ] Репозиторий примеров рабочих процессов
+- [ ] Вклады сообщества в блоки
 
----
-
-## Current Status
-
-**We are here**: End of Phase 1  
-**Next milestone**: Phase 2 - Custom Code Block  
-**Estimated time to v1.0**: 3-6 months (solo dev)
-
----
-
-## Notes
-
-- **No paid features, ever.** This is a community project.
-- **No donation wallet.** Recognition > money.
-- **Modular architecture.** Proprietary zxink modules can be loaded separately.
-- **Developer-first.** If it's not fast and powerful, it's not worth building.
+**Цель**: Создать сообщество опытных пользователей и контрибьюторов.
 
 ---
 
-*Last updated: 2025-11-25*
+## Будущие идеи (Бэклог)
+
+- [ ] Мобильное приложение (React Native) для мониторинга
+- [ ] Блок AI (интеграция GPT-4, Claude)
+- [ ] Визуальный отладчик данных
+- [ ] Маркетплейс рабочих процессов (шаблоны сообщества)
+- [ ] Многопользовательский режим (опционально, для компаний)
+- [ ] Совместная работа в реальном времени (многопользовательское редактирование)
+- [ ] Версионирование рабочих процессов (как Git)
+
+---
+
+## Метрики успеха
+
+### Технические
+- Скорость выполнения: в 5 раз быстрее, чем n8n
+- Использование памяти: <100 МБ для типичных рабочих процессов
+- Время запуска: <1 с
+
+### Принятие
+- 1 000 звезд на GitHub за первые 6 месяцев
+- 100 активных саморазмещенных экземпляров
+- 10 контрибьюторов из сообщества
+
+### Признание
+- Попадание на главную страницу Hacker News
+- Упоминание в рассылках для разработчиков
+- Кейсы от реальных пользователей
+
+---
+
+## Текущий статус
+
+**Мы здесь**: Конец Фазы 1
+**Следующая веха**: Фаза 2 - Пользовательский блок кода
+**Примерное время до v1.0**: 3-6 месяцев (разработка в одиночку)
+
+---
+
+## Примечания
+
+- **Никаких платных функций, никогда.** Это проект сообщества.
+- **Нет кошелька для пожертвований.** Признание > деньги.
+- **Модульная архитектура.** Проприетарные модули zxink могут быть загружены отдельно.
+- **В первую очередь для разработчиков.** Если это не быстро и не мощно, это не стоит строить.
+
+---
+
+*Последнее обновление: 2025-11-25*
