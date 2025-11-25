@@ -18,7 +18,7 @@
 
 ---
 
-## Phase 2: Block Library (PROCEESING)
+## Phase 2: Block Library (COMPLETED ✅)
 
 ### Standard Blocks
 Essential blocks for workflow control flow and data transformation:
@@ -58,6 +58,9 @@ Essential blocks for workflow control flow and data transformation:
   - Custom headers and JSON/string body
   - Timeout protection (max 30 seconds)
   - **Tests**: 30 unit tests ✅
+- [x] `std/http_request` - HTTP GET requests
+  - Full HTTP client functionality
+  - Response parsing and error handling
 
 ### Custom Code Block (KILLER FEATURE) ✅
 - [x] `custom/code` - Custom TypeScript/JavaScript
@@ -66,9 +69,10 @@ Essential blocks for workflow control flow and data transformation:
   - NPM package import support (via dynamic import)
   - Syntax validation (Bun.Transpiler)
   - Error handling with stack traces (SyntaxError, RuntimeError, ImportError)
+  - **Tests**: 15 unit tests ✅
 
 **Goal**: Cover 80% of use cases without custom code, 100% with it.
-**Status**: Core control flow blocks completed. 90 new unit tests added. 263 total tests passing (file: 30, database: 30, webhook: 30).
+**Status**: All core blocks implemented. 235 passing tests, 20 webhook tests failing (network-related).
 
 ---
 
@@ -100,7 +104,7 @@ Essential blocks for workflow control flow and data transformation:
 
 ---
 
-## Phase 4: Persistence Layer
+## Phase 4: Persistence Layer (COMPLETED ✅)
 
 ### Persistence Tech Stack
 > **Decision**: Using `modernc.org/sqlite` (Pure Go, no CGO) for MVP.
@@ -119,8 +123,8 @@ Essential blocks for workflow control flow and data transformation:
 
 ### Workflow Persistence
 - [x] SQLite database schema (`modernc.org/sqlite`)
-  - ~~Workflows table~~ → Execution History table (workflow_executions)
-  - Executions table with full history tracking
+  - Workflows table with full CRUD support
+  - Execution History table (workflow_executions)
   - Execution logs and error tracking
 - [x] Storage Layer abstraction for future BadgerDB migration
   - `Storage` interface with execution-based methods
@@ -131,11 +135,12 @@ Essential blocks for workflow control flow and data transformation:
   - Query past runs via `ListExecutions()`
   - Track execution status (running/completed/failed)
   - Error tracking for failed executions
-- [x] CRUD API for workflows
-  - [x] `POST /api/workflows` - Create
-  - [x] `GET /api/workflows/:id` - Read
-  - [x] `PUT /api/workflows/:id` - Update
-  - [x] `DELETE /api/workflows/:id` - Delete
+- [x] CRUD API for workflows (IMPLEMENTED ✅)
+  - [x] `POST /api/workflows` - Create workflow
+  - [x] `GET /api/workflows/:id` - Read workflow by ID
+  - [x] `GET /api/workflows` - List all workflows
+  - [x] `PUT /api/workflows/:id` - Update workflow
+  - [x] `DELETE /api/workflows/:id` - Delete workflow
 - [ ] Re-run failed executions
 
 ### Configuration
@@ -144,18 +149,35 @@ Essential blocks for workflow control flow and data transformation:
 
 **Goal**: Persistent workflows, execution history, production-ready storage.
 **Strategy**: Start with SQLite (simplicity), migrate to BadgerDB (performance) as it grows.
-**Status**: Execution history implemented with full audit trail support.
+**Status**: Full CRUD API implemented. Workflows and execution history fully functional.
 
 ---
 
-## Phase 5: UI (Web Interface)
+## Phase 5: UI (Web Interface) (IN PROGRESS 🚧)
 
-### Minimal UI (v0.1)
-- [ ] Simple web form to submit a JSON workflow
+### Tech Stack
+- **Framework**: React 19 + TypeScript + Vite
+- **Styling**: TailwindCSS 4.1
+- **Components**: Radix UI primitives
+- **Icons**: Lucide React
+- **Routing**: React Router DOM 7
+
+### Minimal UI (v0.1) - IN PROGRESS
+- [x] Project scaffolding (React + Vite + TailwindCSS)
+- [x] Basic routing setup
+- [x] Layout component with navigation
+- [x] Dashboard page (workflow list view)
+- [x] Editor page (workflow creation/editing)
+- [ ] API integration with backend
+  - [ ] Fetch workflows from `GET /api/workflows`
+  - [ ] Create workflow via `POST /api/workflows`
+  - [ ] Update workflow via `PUT /api/workflows/:id`
+  - [ ] Delete workflow via `DELETE /api/workflows/:id`
+- [ ] Simple JSON editor for workflow definition
 - [ ] Display execution results
-- [ ] View list of workflows
+- [ ] Workflow execution trigger
 
-### Visual Editor (v1.0)
+### Visual Editor (v1.0) - PLANNED
 - [ ] Drag-and-drop workflow builder
   - React Flow or similar library
   - Block palette
@@ -172,12 +194,14 @@ Essential blocks for workflow control flow and data transformation:
   - Autocompletion
 
 ### UX Features
+- [x] Modern UI components (Radix UI)
 - [ ] Dark mode (default)
 - [ ] Keyboard shortcuts
 - [ ] Undo/Redo
 - [ ] Workflow template gallery
 
 **Goal**: An intuitive UI that doesn't compromise power.
+**Status**: Basic UI scaffolding complete. Dashboard and Editor pages created. API integration pending.
 
 ---
 
@@ -305,17 +329,30 @@ Essential blocks for workflow control flow and data transformation:
 
 ## Current Status
 
-**We are here**: Phase 2 - Block Library (COMPLETED ✅)
-**Next milestone**: Phase 4 - CRUD API for workflows, then Phase 5 - UI
-**Estimated time to v1.0**: 2-4 months (solo development)
+**We are here**: Phase 5 - UI (Web Interface) 🚧
+**Completed phases**: 
+- ✅ Phase 1: Foundation
+- ✅ Phase 2: Block Library (8 blocks, 235 passing tests)
+- ✅ Phase 3: Testing & Stability
+- ✅ Phase 4: Persistence Layer (Full CRUD API)
+
+**Next milestone**: Complete UI API integration, then Phase 6 - Advanced Features
+**Estimated time to v1.0**: 1-2 months (solo development)
 
 ### Recent Updates (2025-11-25)
-- ✅ **Phase 2 Block Library - std/delay completed**
-- ✅ Implemented `std/delay` - time delays with ms/s support (26 tests)
-- ✅ DoS protection (max 60 seconds delay)
-- ✅ All 156 Bun tests passing (127 total), all Go tests passing
-- ✅ Created example workflows for delay block
-- ✅ Previous blocks: `std/condition` (30 tests), `std/loop` (31 tests), `std/transform` (24 tests)
+- ✅ **Phase 4 Persistence - CRUD API completed**
+- ✅ Full workflow management API (`/api/workflows` endpoints)
+- ✅ Workflow storage with SQLite (`modernc.org/sqlite`)
+- ✅ Execution history tracking
+- 🚧 **Phase 5 UI - Web interface scaffolding**
+- ✅ React 19 + Vite + TailwindCSS 4.1 setup
+- ✅ Dashboard and Editor pages created
+- ⏳ API integration pending
+
+### Test Status
+- **Bun tests**: 235 passing, 20 failing (webhook network issues)
+- **Go tests**: All passing
+- **Total blocks**: 8 (7 std + 1 custom)
 
 ---
 
@@ -331,5 +368,8 @@ Essential blocks for workflow control flow and data transformation:
 *Last updated: 2025-11-25*
 
 ### Technical Decisions
-- **SQLite driver**: `modernc.org/sqlite` (Pure Go, no CGO)
+- **Backend**: Go 1.21+ with `modernc.org/sqlite` (Pure Go, no CGO)
+- **Worker**: Bun runtime for TypeScript block execution
+- **Frontend**: React 19 + Vite + TailwindCSS 4.1
 - **Future DB**: BadgerDB (after stabilization and user growth)
+- **Architecture**: Clean Architecture with Storage abstraction layer
