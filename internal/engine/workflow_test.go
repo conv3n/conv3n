@@ -5,13 +5,104 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/conv3n/conv3n/internal/engine"
 )
 
+// TestNewWorkflowRunner verifies WorkflowRunner initialization
+func TestNewWorkflowRunner(t *testing.T) {
+	ctx := engine.NewExecutionContext("test-workflow")
+	blocksDir := "/test/blocks"
+	runner := engine.NewWorkflowRunner(ctx, blocksDir)
+
+	if runner == nil {
+		t.Fatal("NewWorkflowRunner returned nil")
+	}
+}
+
+// TestWorkflowRunner_Run_EmptyWorkflow verifies handling of empty workflow
+func TestWorkflowRunner_Run_EmptyWorkflow(t *testing.T) {
+	workflow := engine.Workflow{
+		ID:          "empty-wf",
+		Name:        "Empty Workflow",
+		Blocks:      []engine.Block{},
+		Connections: []engine.Connection{},
+	}
+
+	ctx := engine.NewExecutionContext(workflow.ID)
+	runner := engine.NewWorkflowRunner(ctx, "/tmp")
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := runner.Run(execCtx, workflow)
+	if err != nil {
+		t.Errorf("Empty workflow should not fail, got error: %v", err)
+	}
+}
+
+// TestWorkflowRunner_Run_SingleBlock verifies single block execution
+func TestWorkflowRunner_Run_SingleBlock(t *testing.T) {
+	// Skip if bun is not available
+	if _, err := exec.LookPath("bun"); err != nil {
+		t.Skip("bun not found in PATH, skipping test")
+	}
+
+	// Setup mock HTTP server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message": "success"}`))
+	}))
+	defer ts.Close()
+
+	workflow := engine.Workflow{
+		ID:   "single-block-wf",
+		Name: "Single Block Workflow",
+		Blocks: []engine.Block{
+			{
+				ID:   "http-block",
+				Type: engine.BlockTypeHTTPRequest,
+				Config: map[string]interface{}{
+					"url":    ts.URL,
+					"method": "GET",
+				},
+			},
+		},
+	}
+
+	// Change to project root
+	wd, _ := os.Getwd()
+	os.Chdir("../..")
+	defer os.Chdir(wd)
+
+	ctx := engine.NewExecutionContext(workflow.ID)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := runner.Run(execCtx, workflow)
+	if err != nil {
+		t.Fatalf("Workflow execution failed: %v", err)
+	}
+
+	// Verify result
+	result := ctx.Results["http-block"]
+	if result == nil {
+		t.Fatal("Expected result for http-block, got nil")
+	}
+}
+
 func TestWorkflowRunner_Run_Chain(t *testing.T) {
+	// Skip if bun is not available
+	if _, err := exec.LookPath("bun"); err != nil {
+		t.Skip("bun not found in PATH, skipping test")
+	}
+
 	// 1. Setup Mock HTTP Server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -21,12 +112,6 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 	defer ts.Close()
 
 	// 2. Define Workflow
-	// Block 1: HTTP Request to mock server
-	// Block 2: HTTP Request (simulating a second step) that uses data from Block 1
-	// Note: Since we don't have "Custom Code" block implemented fully yet,
-	// we will use another HTTP block to prove variable substitution works.
-	// We will send the value from Block 1 as a query param to Block 2.
-
 	workflow := engine.Workflow{
 		ID:   "wf-test-1",
 		Name: "Test Chain",
@@ -43,8 +128,7 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 				ID:   "block_2",
 				Type: engine.BlockTypeHTTPRequest,
 				Config: engine.BlockConfig{
-					// Here we use the variable substitution!
-					// We expect {{ $node.block_1.data.value }} to be replaced with 100
+					// Variable substitution test
 					"url":    ts.URL + "?prev_value={{ $node.block_1.data.value }}",
 					"method": "GET",
 				},
@@ -53,18 +137,10 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 	}
 
 	// 3. Run Workflow
-	// We need to make sure we are in the right directory for the runner to find the script
-	// Or we can hack the runner to look in the right place.
-	// For this test, let's assume we run `go test ./...` from root.
-	// But `go test` runs in the package dir.
-	// We need to ensure `pkg/blocks/std/http_request.ts` is accessible relative to CWD.
-	// Let's change CWD to project root for the test.
 	wd, _ := os.Getwd()
-	// internal/engine -> ../..
 	os.Chdir("../..")
 	defer os.Chdir(wd)
 
-	// We are now in project root. Blocks are in pkg/blocks
 	blocksDir := "pkg/blocks"
 
 	ctx := engine.NewExecutionContext(workflow.ID)
@@ -88,14 +164,124 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 		t.Fatal("Block 2 result missing")
 	}
 
-	// Check if variable substitution worked
-	// We can't easily check the URL called in the second request without a more complex mock,
-	// but if the workflow finished without error, it means the URL was valid.
-	// Let's inspect the result of block 1 to be sure.
-
+	// Check variable substitution worked
 	resMap1 := res1.(map[string]interface{})
 	data1 := resMap1["data"].(map[string]interface{})
 	if data1["value"].(float64) != 100 {
 		t.Errorf("Expected block 1 value 100, got %v", data1["value"])
+	}
+}
+
+// TestWorkflowRunner_Run_ErrorInBlock verifies error handling during block execution
+func TestWorkflowRunner_Run_ErrorInBlock(t *testing.T) {
+	// Skip if bun is not available
+	if _, err := exec.LookPath("bun"); err != nil {
+		t.Skip("bun not found in PATH, skipping test")
+	}
+
+	workflow := engine.Workflow{
+		ID:   "error-wf",
+		Name: "Error Workflow",
+		Blocks: []engine.Block{
+			{
+				ID:   "bad-block",
+				Type: engine.BlockTypeHTTPRequest,
+				Config: map[string]interface{}{
+					// Missing required 'url' field
+					"method": "GET",
+				},
+			},
+		},
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir("../..")
+	defer os.Chdir(wd)
+
+	ctx := engine.NewExecutionContext(workflow.ID)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := runner.Run(execCtx, workflow)
+	if err == nil {
+		t.Error("Expected error for block with missing config, got nil")
+	}
+}
+
+// TestWorkflowRunner_Run_SequentialExecution verifies blocks execute in order
+func TestWorkflowRunner_Run_SequentialExecution(t *testing.T) {
+	// Skip if bun is not available
+	if _, err := exec.LookPath("bun"); err != nil {
+		t.Skip("bun not found in PATH, skipping test")
+	}
+
+	callOrder := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		blockID := r.URL.Query().Get("block")
+		callOrder = append(callOrder, blockID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok": true}`))
+	}))
+	defer ts.Close()
+
+	workflow := engine.Workflow{
+		ID:   "sequential-wf",
+		Name: "Sequential Workflow",
+		Blocks: []engine.Block{
+			{
+				ID:   "block-1",
+				Type: engine.BlockTypeHTTPRequest,
+				Config: map[string]interface{}{
+					"url":    ts.URL + "?block=1",
+					"method": "GET",
+				},
+			},
+			{
+				ID:   "block-2",
+				Type: engine.BlockTypeHTTPRequest,
+				Config: map[string]interface{}{
+					"url":    ts.URL + "?block=2",
+					"method": "GET",
+				},
+			},
+			{
+				ID:   "block-3",
+				Type: engine.BlockTypeHTTPRequest,
+				Config: map[string]interface{}{
+					"url":    ts.URL + "?block=3",
+					"method": "GET",
+				},
+			},
+		},
+	}
+
+	wd, _ := os.Getwd()
+	os.Chdir("../..")
+	defer os.Chdir(wd)
+
+	ctx := engine.NewExecutionContext(workflow.ID)
+	runner := engine.NewWorkflowRunner(ctx, "pkg/blocks")
+
+	execCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := runner.Run(execCtx, workflow)
+	if err != nil {
+		t.Fatalf("Workflow execution failed: %v", err)
+	}
+
+	// Verify execution order
+	expectedOrder := []string{"1", "2", "3"}
+	if len(callOrder) != len(expectedOrder) {
+		t.Fatalf("Expected %d calls, got %d", len(expectedOrder), len(callOrder))
+	}
+
+	for i, expected := range expectedOrder {
+		if callOrder[i] != expected {
+			t.Errorf("Call %d: expected block %s, got %s", i, expected, callOrder[i])
+		}
 	}
 }

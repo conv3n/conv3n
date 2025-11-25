@@ -3,6 +3,10 @@
     "version": "0.1.0",
     "description": "Bun runtime blocks for Conv3n workflow engine",
     "type": "module",
+    "scripts": {
+        "test": "bun test",
+        "test:watch": "bun test --watch"
+    },
     "devDependencies": {
         "@types/bun": "latest"
     }
