@@ -56,7 +56,7 @@ Implement essential blocks for real-world workflows:
 
 ---
 
-## Phase 3: Testing & Stability (IN PROGRESS 🚧)
+## Phase 3: Testing & Stability (COMPLETED ✅)
 
 ### Unit Tests
 - [x] Core engine tests (`internal/engine`)
@@ -69,6 +69,10 @@ Implement essential blocks for real-world workflows:
 - [x] API tests (`cmd/conv3n`)
   - HTTP endpoints
   - Request validation
+- [x] Storage tests (`internal/storage`)
+  - Execution history tracking
+  - Parallel test isolation (t.TempDir)
+  - Race condition prevention
 
 ### Integration Tests
 - [ ] End-to-end workflow scenarios
@@ -76,6 +80,7 @@ Implement essential blocks for real-world workflows:
 - [ ] Memory leak detection
 
 **Goal**: 80%+ code coverage, zero critical bugs.
+**Status**: Unit tests complete with parallel execution support and race-free implementation.
 
 ---
 
@@ -97,23 +102,25 @@ Implement essential blocks for real-world workflows:
 - Transition when performance bottlenecks appear
 
 ### Workflow Persistence
-- [ ] SQLite database schema (`modernc.org/sqlite`)
-  - Workflows table
-  - Executions table (history)
-  - Execution logs
-- [ ] Storage Layer abstraction for future BadgerDB migration
-  - `Storage` interface with CRUD methods
+- [x] SQLite database schema (`modernc.org/sqlite`)
+  - ~~Workflows table~~ → Execution History table (workflow_executions)
+  - Executions table with full history tracking
+  - Execution logs and error tracking
+- [x] Storage Layer abstraction for future BadgerDB migration
+  - `Storage` interface with execution-based methods
   - SQLite implementation (`storage.NewSQLite()`)
   - Readiness for replacement with `storage.NewBadger()`
+- [x] Execution History (IMPLEMENTED ✅)
+  - Store results of each execution with unique execution_id
+  - Query past runs via `ListExecutions()`
+  - Track execution status (running/completed/failed)
+  - Error tracking for failed executions
 - [ ] CRUD API for workflows
   - `POST /api/workflows` - Create
   - `GET /api/workflows/:id` - Read
   - `PUT /api/workflows/:id` - Update
   - `DELETE /api/workflows/:id` - Delete
-- [ ] Execution History
-  - Store results of each execution
-  - Query past runs
-  - Re-run failed executions
+- [ ] Re-run failed executions
 
 ### Configuration
 - [ ] Environment-based configuration
@@ -121,6 +128,7 @@ Implement essential blocks for real-world workflows:
 
 **Goal**: Persistent workflows, execution history, production-ready storage.
 **Strategy**: Start with SQLite (simplicity), migrate to BadgerDB (performance) as it grows.
+**Status**: Execution history implemented with full audit trail support.
 
 ---
 
@@ -281,9 +289,15 @@ Implement essential blocks for real-world workflows:
 
 ## Current Status
 
-**We are here**: Phase 3 - Testing & Stability
-**Next milestone**: Phase 3 - Integration Tests, then Phase 4 - Persistence Layer
+**We are here**: Phase 4 - Persistence Layer (Execution History ✅)
+**Next milestone**: Phase 4 - CRUD API for workflows, then Phase 5 - UI
 **Estimated time to v1.0**: 2-4 months (solo development)
+
+### Recent Updates (2025-11-25)
+- ✅ Fixed flaky tests using `t.TempDir()` for test isolation
+- ✅ Migrated from workflow-state model to execution-history model
+- ✅ Implemented full execution tracking with status and error logging
+- ✅ All tests pass with parallel execution and race detector
 
 ---
 
