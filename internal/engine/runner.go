@@ -60,6 +60,11 @@ func (r *BunRunner) Execute(ctx context.Context, scriptPath string, input any) (
 		return nil, fmt.Errorf("bun execution failed: %v, stderr: %s", err, stderr.String())
 	}
 
+	// Log stderr for debugging (even on success)
+	if stderr.Len() > 0 {
+		fmt.Printf("[BunRunner stderr]: %s\n", stderr.String())
+	}
+
 	// Parse the output JSON
 	var result any
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {

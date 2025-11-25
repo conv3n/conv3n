@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -126,9 +127,11 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 
 	// 1. Setup Mock HTTP Server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := `{"message": "hello from api", "value": 100}`
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"message": "hello from api", "value": 100}`))
+		fmt.Fprint(w, body)
 	}))
 	defer ts.Close()
 
@@ -186,9 +189,22 @@ func TestWorkflowRunner_Run_Chain(t *testing.T) {
 		t.Fatal("Block 2 result missing")
 	}
 
+	// Debug: print structure to understand the issue
+	t.Logf("Block 1 result type: %T, value: %+v", res1, res1)
+	
 	// Check variable substitution worked
-	resMap1 := res1.(map[string]interface{})
-	data1 := resMap1["data"].(map[string]interface{})
+	resMap1, ok := res1.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected block 1 result to be map, got %T", res1)
+	}
+	
+	t.Logf("Block 1 data field type: %T, value: %+v", resMap1["data"], resMap1["data"])
+	
+	data1, ok := resMap1["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected block 1 data to be map, got %T: %v", resMap1["data"], resMap1["data"])
+	}
+	
 	if data1["value"].(float64) != 100 {
 		t.Errorf("Expected block 1 value 100, got %v", data1["value"])
 	}

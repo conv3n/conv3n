@@ -69,6 +69,14 @@ func (wr *WorkflowRunner) Run(ctx context.Context, workflow Workflow) error {
 			return fmt.Errorf("failed to execute block %s: %w", block.ID, err)
 		}
 
+		// Debug: log result structure
+		log.Printf("Block %s result type: %T", block.ID, result)
+		if resMap, ok := result.(map[string]interface{}); ok {
+			if data, exists := resMap["data"]; exists {
+				log.Printf("Block %s data field type: %T, value: %+v", block.ID, data, data)
+			}
+		}
+
 		// 3. Save Result
 		// Save to DB
 		resBytes, _ := json.Marshal(result)

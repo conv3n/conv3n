@@ -44,10 +44,17 @@ export async function executeHttpRequest(config: HttpRequestConfig): Promise<Htt
 
     // Process response
     const responseData = await response.text();
+    
+    // Debug logging to stderr (won't interfere with stdout JSON)
+    console.error(`[DEBUG] Response text length: ${responseData.length}`);
+    console.error(`[DEBUG] Response text: ${responseData.substring(0, 200)}`);
+    
     let parsedData;
     try {
         parsedData = JSON.parse(responseData);
-    } catch {
+        console.error(`[DEBUG] Parsed data type: ${typeof parsedData}`);
+    } catch (e) {
+        console.error(`[DEBUG] JSON parse failed: ${e}, using raw text`);
         parsedData = responseData; // Fallback to text if not JSON
     }
 
