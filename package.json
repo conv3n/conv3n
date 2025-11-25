@@ -1,0 +1,9 @@
+{
+    "name": "conv3n-blocks",
+    "version": "0.1.0",
+    "description": "Bun runtime blocks for Conv3n workflow engine",
+    "type": "module",
+    "devDependencies": {
+        "@types/bun": "latest"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "id": "test-npm-import",
+    "name": "Test NPM Package Import",
+    "blocks": [
+        {
+            "id": "use_crypto",
+            "type": "custom/code",
+            "config": {
+                "code": "export default async (input) => { const hash = await Bun.password.hash(input.password, { algorithm: 'bcrypt' }); return { hash, timestamp: new Date().toISOString() }; }",
+                "input": {
+                    "password": "test123"
+                }
+            }
+        }
+    ]
+}

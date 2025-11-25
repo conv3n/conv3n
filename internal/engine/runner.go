@@ -79,8 +79,9 @@ func (r *BunRunner) ExecuteBlock(ctx context.Context, block Block, input any) (a
 		// Use filepath.Join with the configured BlocksDir
 		scriptPath = filepath.Join(r.BlocksDir, "std", "http_request.ts")
 	case BlockTypeCustomCode:
-		// For custom code, we might use a generic runner that evals the code
-		return nil, fmt.Errorf("custom code not implemented yet")
+		// For custom code, use the custom/code.ts wrapper
+		// The user code is passed via the config.code field
+		scriptPath = filepath.Join(r.BlocksDir, "custom", "code.ts")
 	default:
 		return nil, fmt.Errorf("unknown block type: %s", block.Type)
 	}
