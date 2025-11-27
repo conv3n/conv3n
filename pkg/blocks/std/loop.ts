@@ -1,25 +1,28 @@
 // pkg/blocks/std/loop.ts
 // Standard Block: Loop/Iteration
-// Iterates over arrays and applies transformations
-
-import { stdin, stdout } from "bun";
+// Iterates over arrays and applies transformations.
 
 // Type definitions for input/output
 export interface LoopConfig {
-    items: any[];            // Array to iterate over (from {{ $node.X.data }})
+    items: unknown[];        // Array to iterate over (from {{ $node.X.data }})
     mapExpression?: string;  // Optional: JavaScript expression for mapping (e.g., "item => item * 2")
     filterExpression?: string; // Optional: JavaScript expression for filtering (e.g., "item => item > 10")
 }
 
 export interface LoopInput {
     config: LoopConfig;
-    input?: any;             // Data from previous blocks
+    input?: unknown;         // Data from previous blocks
 }
 
 export interface LoopOutput {
-    results: any[];          // Processed items
+    results: unknown[];      // Processed items
     count: number;           // Number of items processed
     originalCount: number;   // Original array length
+}
+
+export interface BlockResult {
+    data: LoopOutput;
+    port: string;
 }
 
 
@@ -102,7 +105,7 @@ export function applyFilter(items: any[], expression: string): any[] {
 }
 
 // Main execution function
-export async function main() {
+export async function main(): Promise<void> {
     try {
         // 1. Read input
         const input: LoopInput = await Bun.stdin.json();
@@ -112,36 +115,37 @@ export async function main() {
         validateConfig(config);
 
         // 3. Get items array
-        let items = config.items;
+        let items = [...config.items];
         const originalCount = items.length;
 
-
-
-        // 5. Apply filter if provided
+        // 4. Apply filter if provided
         if (config.filterExpression) {
             validateExpression(config.filterExpression);
             items = applyFilter(items, config.filterExpression);
         }
 
-        // 6. Apply map if provided
+        // 5. Apply map if provided
         if (config.mapExpression) {
             validateExpression(config.mapExpression);
             items = applyMap(items, config.mapExpression);
         }
 
-        // 7. Prepare output
-        const output: LoopOutput = {
-            results: items,
-            count: items.length,
-            originalCount,
+        // 6. Build output with port routing
+        const output: BlockResult = {
+            data: {
+                results: items,
+                count: items.length,
+                originalCount,
+            },
+            port: items.length > 0 ? "default" : "empty",
         };
 
-        // 8. Write output
+        // 7. Write output
         await Bun.write(Bun.stdout, JSON.stringify(output));
 
-    } catch (error: any) {
-        // Write error to stderr
-        console.error(`Loop Block Failed: ${error.message}`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Loop Block Failed: ${message}`);
         process.exit(1);
     }
 }

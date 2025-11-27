@@ -1,20 +1,19 @@
 // pkg/blocks/custom/code.ts
 // Custom Code Block: Execute user-provided TypeScript/JavaScript
-// This block allows users to write arbitrary code that will be executed in the Bun runtime.
-
-import { stdin, stdout } from "bun";
+// Allows users to write arbitrary code executed in the Bun runtime.
 
 // Define type-safe input/output interfaces
 interface CustomCodeInput {
     config: {
-        code: string; // User-provided code as a string
+        code: string;        // User-provided code as a string
+        input?: unknown;     // Optional input data resolved from variables
     };
-    input?: any; // Optional input data from previous blocks
+    input?: unknown;         // Optional input data from previous blocks
 }
 
 interface CustomCodeOutput {
     success: boolean;
-    data?: any;
+    data?: unknown;
     error?: {
         message: string;
         stack?: string;
@@ -23,7 +22,29 @@ interface CustomCodeOutput {
     executionTime: number;
 }
 
-async function main() {
+interface BlockResult {
+    data: CustomCodeOutput;
+    port: string;
+}
+
+// Helper to create error result
+function createErrorResult(
+    message: string,
+    type: string,
+    stack: string | undefined,
+    executionTime: number
+): BlockResult {
+    return {
+        data: {
+            success: false,
+            error: { message, type, stack },
+            executionTime,
+        },
+        port: "error",
+    };
+}
+
+async function main(): Promise<void> {
     const startTime = performance.now();
 
     try {
@@ -39,29 +60,23 @@ async function main() {
         // Determine the data to pass to user function
         // If config.input is specified (resolved from variables), use it
         // Otherwise, use the input field from the payload
-        const userData = (input.config as any).input !== undefined
-            ? (input.config as any).input
-            : (input.input || {});
+        const userData = input.config.input !== undefined
+            ? input.config.input
+            : (input.input ?? {});
 
         // 2. Validate syntax by attempting to transpile
-        // Bun's transpiler will throw if there are syntax errors
         try {
-            const transpiler = new Bun.Transpiler({
-                loader: "ts",
-            });
+            const transpiler = new Bun.Transpiler({ loader: "ts" });
             transpiler.transformSync(userCode);
-        } catch (syntaxError: any) {
-            // Syntax validation failed - return detailed error
+        } catch (syntaxError) {
             const endTime = performance.now();
-            const result: CustomCodeOutput = {
-                success: false,
-                error: {
-                    message: `Syntax Error: ${syntaxError.message}`,
-                    stack: syntaxError.stack,
-                    type: "SyntaxError",
-                },
-                executionTime: endTime - startTime,
-            };
+            const err = syntaxError instanceof Error ? syntaxError : new Error(String(syntaxError));
+            const result = createErrorResult(
+                `Syntax Error: ${err.message}`,
+                "SyntaxError",
+                err.stack,
+                endTime - startTime
+            );
             await Bun.write(Bun.stdout, JSON.stringify(result));
             return;
         }
@@ -70,17 +85,15 @@ async function main() {
         // User code should export a default async function that accepts input and returns output
         // Example: export default async (input) => { return { result: input.value * 2 }; }
 
-        let userFunction: (input: any) => Promise<any>;
+        let userFunction: (input: unknown) => Promise<unknown>;
 
         try {
             // Create a temporary module from the user code
-            // We wrap it to ensure it's a valid module
             const moduleCode = userCode.includes("export default")
                 ? userCode
                 : `export default async (input) => { ${userCode} }`;
 
             // Use dynamic import with data URL to execute the code
-            // This provides better isolation than eval()
             const dataUrl = `data:text/typescript;base64,${btoa(moduleCode)}`;
             const module = await import(dataUrl);
             userFunction = module.default;
@@ -88,66 +101,61 @@ async function main() {
             if (typeof userFunction !== "function") {
                 throw new Error("User code must export a default function");
             }
-        } catch (importError: any) {
-            // Failed to create executable function
+        } catch (importError) {
             const endTime = performance.now();
-            const result: CustomCodeOutput = {
-                success: false,
-                error: {
-                    message: `Import Error: ${importError.message}`,
-                    stack: importError.stack,
-                    type: "ImportError",
-                },
-                executionTime: endTime - startTime,
-            };
+            const err = importError instanceof Error ? importError : new Error(String(importError));
+            const result = createErrorResult(
+                `Import Error: ${err.message}`,
+                "ImportError",
+                err.stack,
+                endTime - startTime
+            );
             await Bun.write(Bun.stdout, JSON.stringify(result));
             return;
         }
 
         // 4. Execute the user function with input data
-        let executionResult: any;
+        let executionResult: unknown;
 
         try {
             executionResult = await userFunction(userData);
-        } catch (runtimeError: any) {
-            // Runtime error during execution
+        } catch (runtimeError) {
             const endTime = performance.now();
-            const result: CustomCodeOutput = {
-                success: false,
-                error: {
-                    message: `Runtime Error: ${runtimeError.message}`,
-                    stack: runtimeError.stack,
-                    type: runtimeError.name || "RuntimeError",
-                },
-                executionTime: endTime - startTime,
-            };
+            const err = runtimeError instanceof Error ? runtimeError : new Error(String(runtimeError));
+            const result = createErrorResult(
+                `Runtime Error: ${err.message}`,
+                err.name || "RuntimeError",
+                err.stack,
+                endTime - startTime
+            );
             await Bun.write(Bun.stdout, JSON.stringify(result));
             return;
         }
 
-        // 5. Return successful result
+        // 5. Return successful result with port routing
         const endTime = performance.now();
-        const result: CustomCodeOutput = {
-            success: true,
-            data: executionResult,
-            executionTime: endTime - startTime,
+        const result: BlockResult = {
+            data: {
+                success: true,
+                data: executionResult,
+                executionTime: endTime - startTime,
+            },
+            port: "default",
         };
 
         await Bun.write(Bun.stdout, JSON.stringify(result));
 
-    } catch (error: any) {
+    } catch (error) {
         // Catch-all for unexpected errors
-        console.error(`Custom Code Block Failed: ${error}`);
         const endTime = performance.now();
-        const result: CustomCodeOutput = {
-            success: false,
-            error: {
-                message: error.message || "Unknown error",
-                stack: error.stack,
-                type: "UnexpectedError",
-            },
-            executionTime: endTime - startTime,
-        };
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error(`Custom Code Block Failed: ${err.message}`);
+        const result = createErrorResult(
+            err.message || "Unknown error",
+            "UnexpectedError",
+            err.stack,
+            endTime - startTime
+        );
         await Bun.write(Bun.stdout, JSON.stringify(result));
         process.exit(1);
     }

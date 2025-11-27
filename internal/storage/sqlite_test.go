@@ -254,6 +254,98 @@ func TestSQLiteStorage(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TriggerCRUD", func(t *testing.T) {
+		workflowID := "test-workflow-trigger"
+
+		// Create trigger
+		config := []byte(`{"schedule":"* * * * *"}`)
+		trigger := &storage.Trigger{
+			ID:         "trigger-1",
+			WorkflowID: workflowID,
+			Type:       "cron",
+			Config:     config,
+			Enabled:    true,
+		}
+
+		err := store.CreateTrigger(ctx, trigger)
+		if err != nil {
+			t.Fatalf("failed to create trigger: %v", err)
+		}
+
+		// Get trigger
+		got, err := store.GetTrigger(ctx, "trigger-1")
+		if err != nil {
+			t.Fatalf("failed to get trigger: %v", err)
+		}
+
+		if got.WorkflowID != workflowID {
+			t.Errorf("expected workflow_id %s, got %s", workflowID, got.WorkflowID)
+		}
+
+		// Update trigger
+		got.Enabled = false
+		err = store.UpdateTrigger(ctx, got)
+		if err != nil {
+			t.Fatalf("failed to update trigger: %v", err)
+		}
+
+		updated, _ := store.GetTrigger(ctx, "trigger-1")
+		if updated.Enabled {
+			t.Error("expected trigger to be disabled")
+		}
+
+		// List triggers
+		list, err := store.ListTriggers(ctx, workflowID)
+		if err != nil {
+			t.Fatalf("failed to list triggers: %v", err)
+		}
+		if len(list) != 1 {
+			t.Errorf("expected 1 trigger, got %d", len(list))
+		}
+
+		// Delete trigger
+		err = store.DeleteTrigger(ctx, "trigger-1")
+		if err != nil {
+			t.Fatalf("failed to delete trigger: %v", err)
+		}
+
+		_, err = store.GetTrigger(ctx, "trigger-1")
+		if err == nil {
+			t.Error("expected error getting deleted trigger")
+		}
+	})
+
+	t.Run("TriggerExecutions", func(t *testing.T) {
+		triggerID := "trigger-exec-test"
+
+		// Create execution
+		exec := &storage.TriggerExecution{
+			ID:        "texec-1",
+			TriggerID: triggerID,
+			Status:    "success",
+			Payload:   []byte(`{"foo":"bar"}`),
+		}
+
+		err := store.CreateTriggerExecution(ctx, exec)
+		if err != nil {
+			t.Fatalf("failed to create trigger execution: %v", err)
+		}
+
+		// List executions
+		list, err := store.ListTriggerExecutions(ctx, triggerID, 10)
+		if err != nil {
+			t.Fatalf("failed to list trigger executions: %v", err)
+		}
+
+		if len(list) != 1 {
+			t.Errorf("expected 1 execution, got %d", len(list))
+		}
+
+		if list[0].ID != "texec-1" {
+			t.Errorf("expected ID texec-1, got %s", list[0].ID)
+		}
+	})
 }
 
 // TestParallelExecutions verifies that tests can run in parallel without conflicts
@@ -285,5 +377,181 @@ func TestParallelExecutions(t *testing.T) {
 
 	if exec.Status != storage.ExecutionStatusRunning {
 		t.Errorf("expected status running, got %s", exec.Status)
+	}
+}
+
+func TestWorkflowCRUD(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "workflow_test.db")
+
+	store, err := storage.NewSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	t.Run("CreateAndGetWorkflow", func(t *testing.T) {
+		workflow := &storage.Workflow{
+			ID:         "wf-1",
+			Name:       "Test Workflow 1",
+			Definition: []byte(`{"nodes":[]}`),
+		}
+
+		err := store.CreateWorkflow(ctx, workflow)
+		if err != nil {
+			t.Fatalf("failed to create workflow: %v", err)
+		}
+
+		got, err := store.GetWorkflow(ctx, "wf-1")
+		if err != nil {
+			t.Fatalf("failed to get workflow: %v", err)
+		}
+
+		if got.ID != workflow.ID {
+			t.Errorf("expected ID %s, got %s", workflow.ID, got.ID)
+		}
+		if got.Name != workflow.Name {
+			t.Errorf("expected Name %s, got %s", workflow.Name, got.Name)
+		}
+		if string(got.Definition) != string(workflow.Definition) {
+			t.Errorf("expected Definition %s, got %s", workflow.Definition, got.Definition)
+		}
+	})
+
+	t.Run("UpdateWorkflow", func(t *testing.T) {
+		workflow := &storage.Workflow{
+			ID:         "wf-2",
+			Name:       "Test Workflow 2",
+			Definition: []byte(`{"nodes":[]}`),
+		}
+
+		err := store.CreateWorkflow(ctx, workflow)
+		if err != nil {
+			t.Fatalf("failed to create workflow: %v", err)
+		}
+
+		// Update
+		workflow.Name = "Updated Workflow 2"
+		workflow.Definition = []byte(`{"nodes":[{"id":"1"}]}`)
+		err = store.UpdateWorkflow(ctx, workflow)
+		if err != nil {
+			t.Fatalf("failed to update workflow: %v", err)
+		}
+
+		got, err := store.GetWorkflow(ctx, "wf-2")
+		if err != nil {
+			t.Fatalf("failed to get workflow: %v", err)
+		}
+
+		if got.Name != "Updated Workflow 2" {
+			t.Errorf("expected updated Name, got %s", got.Name)
+		}
+		if string(got.Definition) != string(workflow.Definition) {
+			t.Errorf("expected updated Definition, got %s", got.Definition)
+		}
+	})
+
+	t.Run("DeleteWorkflow", func(t *testing.T) {
+		workflow := &storage.Workflow{
+			ID:         "wf-3",
+			Name:       "Test Workflow 3",
+			Definition: []byte(`{"nodes":[]}`),
+		}
+
+		err := store.CreateWorkflow(ctx, workflow)
+		if err != nil {
+			t.Fatalf("failed to create workflow: %v", err)
+		}
+
+		err = store.DeleteWorkflow(ctx, "wf-3")
+		if err != nil {
+			t.Fatalf("failed to delete workflow: %v", err)
+		}
+
+		_, err = store.GetWorkflow(ctx, "wf-3")
+		if err == nil {
+			t.Error("expected error getting deleted workflow")
+		}
+	})
+
+	t.Run("ListWorkflows", func(t *testing.T) {
+		// Clear db for this test or just count
+		// Since we run in parallel with unique db per test function (TestWorkflowCRUD),
+		// we are safe from other tests, but we have created wf-1, wf-2, wf-3 (deleted) above.
+		// Actually TestWorkflowCRUD runs sequentially its sub-tests sharing the same db.
+		// So we have wf-1 and wf-2 present.
+
+		list, err := store.ListWorkflows(ctx)
+		if err != nil {
+			t.Fatalf("failed to list workflows: %v", err)
+		}
+
+		// We expect at least wf-1 and wf-2
+		found := 0
+		for _, w := range list {
+			if w.ID == "wf-1" || w.ID == "wf-2" {
+				found++
+			}
+		}
+
+		if found != 2 {
+			t.Errorf("expected to find wf-1 and wf-2, found %d", found)
+		}
+	})
+}
+
+func TestListAllTriggers(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "triggers_test.db")
+
+	store, err := storage.NewSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create storage: %v", err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+
+	// Create workflow first due to FK constraint
+	wf := &storage.Workflow{ID: "wf-triggers", Name: "WF Triggers", Definition: []byte("{}")}
+	if err := store.CreateWorkflow(ctx, wf); err != nil {
+		t.Fatalf("failed to create workflow: %v", err)
+	}
+
+	// Create triggers
+	t1 := &storage.Trigger{ID: "t1", WorkflowID: "wf-triggers", Type: "cron", Config: []byte("{}"), Enabled: true}
+	t2 := &storage.Trigger{ID: "t2", WorkflowID: "wf-triggers", Type: "webhook", Config: []byte("{}"), Enabled: false}
+	t3 := &storage.Trigger{ID: "t3", WorkflowID: "wf-triggers", Type: "interval", Config: []byte("{}"), Enabled: true}
+
+	for _, tr := range []*storage.Trigger{t1, t2, t3} {
+		if err := store.CreateTrigger(ctx, tr); err != nil {
+			t.Fatalf("failed to create trigger %s: %v", tr.ID, err)
+		}
+	}
+
+	// ListAllTriggers should return only enabled triggers (t1, t3)
+	list, err := store.ListAllTriggers(ctx)
+	if err != nil {
+		t.Fatalf("failed to list all triggers: %v", err)
+	}
+
+	if len(list) != 2 {
+		t.Errorf("expected 2 enabled triggers, got %d", len(list))
+	}
+
+	ids := make(map[string]bool)
+	for _, tr := range list {
+		ids[tr.ID] = true
+	}
+
+	if !ids["t1"] || !ids["t3"] {
+		t.Errorf("expected t1 and t3, got %v", ids)
+	}
+	if ids["t2"] {
+		t.Error("did not expect disabled trigger t2")
 	}
 }

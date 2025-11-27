@@ -31,11 +31,11 @@ describe("HTTP Request Block", () => {
         });
 
         test("should throw error when config is null", () => {
-            expect(() => validateConfig(null)).toThrow("Missing required config: url");
+            expect(() => validateConfig(null)).toThrow("Missing required config");
         });
 
         test("should throw error when config is undefined", () => {
-            expect(() => validateConfig(undefined)).toThrow("Missing required config: url");
+            expect(() => validateConfig(undefined)).toThrow("Missing required config");
         });
     });
 
@@ -48,7 +48,7 @@ describe("HTTP Request Block", () => {
                 text: async () => JSON.stringify({ message: "success" }),
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/data",
@@ -75,7 +75,7 @@ describe("HTTP Request Block", () => {
                 // Verify request body
                 expect(options.body).toBe(JSON.stringify({ name: "John Doe", email: "john@example.com" }));
                 return mockResponse as any;
-            });
+            }) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/users",
@@ -104,7 +104,7 @@ describe("HTTP Request Block", () => {
                 text: async () => "Plain text response",
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/text",
@@ -130,7 +130,7 @@ describe("HTTP Request Block", () => {
                 expect(options.headers["Authorization"]).toBe("Bearer token123");
                 expect(options.headers["X-Custom-Header"]).toBe("custom-value");
                 return mockResponse as any;
-            });
+            }) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/secure",
@@ -159,7 +159,7 @@ describe("HTTP Request Block", () => {
                 // Verify default method
                 expect(options.method).toBe("GET");
                 return mockResponse as any;
-            });
+            }) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/default",
@@ -181,7 +181,7 @@ describe("HTTP Request Block", () => {
                 text: async () => JSON.stringify({ ok: true }),
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/headers",
@@ -198,7 +198,7 @@ describe("HTTP Request Block", () => {
         test("should handle network errors", async () => {
             global.fetch = mock(async () => {
                 throw new Error("Network error: Connection refused");
-            });
+            }) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/fail",
@@ -222,7 +222,7 @@ describe("HTTP Request Block", () => {
                 global.fetch = mock(async (url: string, options?: any) => {
                     expect(options.method).toBe(method);
                     return mockResponse as any;
-                });
+                }) as any;
 
                 const config: HttpRequestConfig = {
                     url: "https://api.example.com/test",
@@ -242,7 +242,7 @@ describe("HTTP Request Block", () => {
                 text: async () => "",
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/empty",
@@ -263,7 +263,7 @@ describe("HTTP Request Block", () => {
                 text: async () => "{invalid json}",
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/malformed",
@@ -284,7 +284,7 @@ describe("HTTP Request Block", () => {
                 text: async () => JSON.stringify({ error: "Not found" }),
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/notfound",
@@ -306,7 +306,7 @@ describe("HTTP Request Block", () => {
                 text: async () => "Server error",
             };
 
-            global.fetch = mock(async () => mockResponse as any);
+            global.fetch = mock(async () => mockResponse as any) as any;
 
             const config: HttpRequestConfig = {
                 url: "https://api.example.com/error",
@@ -317,6 +317,32 @@ describe("HTTP Request Block", () => {
 
             expect(result.status).toBe(500);
             expect(result.statusText).toBe("Internal Server Error");
+        });
+    });
+
+    describe("getOutputPort", () => {
+        const { getOutputPort } = require("./http_request");
+
+        test("should return success for 2xx status", () => {
+            expect(getOutputPort(200)).toBe("success");
+            expect(getOutputPort(201)).toBe("success");
+            expect(getOutputPort(299)).toBe("success");
+        });
+
+        test("should return client_error for 4xx status", () => {
+            expect(getOutputPort(400)).toBe("client_error");
+            expect(getOutputPort(404)).toBe("client_error");
+            expect(getOutputPort(499)).toBe("client_error");
+        });
+
+        test("should return server_error for 5xx status", () => {
+            expect(getOutputPort(500)).toBe("server_error");
+            expect(getOutputPort(503)).toBe("server_error");
+        });
+
+        test("should return default for other status", () => {
+            expect(getOutputPort(100)).toBe("default");
+            expect(getOutputPort(300)).toBe("default");
         });
     });
 });

@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+// Helper function to create ExecutionContext from state map for testing
+func createTestContext(state map[string]interface{}) *ExecutionContext {
+	ctx := NewExecutionContext("test")
+	ctx.Results = state
+	return ctx
+}
+
 // TestResolveVariablesString verifies string variable resolution
 func TestResolveVariablesString(t *testing.T) {
 	state := map[string]interface{}{
@@ -14,6 +21,7 @@ func TestResolveVariablesString(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	tests := []struct {
 		name     string
@@ -49,7 +57,7 @@ func TestResolveVariablesString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ResolveVariables(tt.input, state)
+			result, err := ResolveVariables(tt.input, ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ResolveVariables() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -71,6 +79,7 @@ func TestResolveVariablesObject(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	input := map[string]interface{}{
 		"url":    "https://api.example.com/users/{{ $node.api_response.data.userId }}",
@@ -80,7 +89,7 @@ func TestResolveVariablesObject(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveVariables(input, state)
+	result, err := ResolveVariables(input, ctx)
 	if err != nil {
 		t.Fatalf("ResolveVariables() error = %v", err)
 	}
@@ -109,6 +118,7 @@ func TestResolveVariablesArray(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	input := []interface{}{
 		"static value",
@@ -118,7 +128,7 @@ func TestResolveVariablesArray(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveVariables(input, state)
+	result, err := ResolveVariables(input, ctx)
 	if err != nil {
 		t.Fatalf("ResolveVariables() error = %v", err)
 	}
@@ -148,7 +158,7 @@ func TestResolveVariablesArray(t *testing.T) {
 
 // TestResolveVariablesPrimitives verifies primitive types pass through unchanged
 func TestResolveVariablesPrimitives(t *testing.T) {
-	state := map[string]interface{}{}
+	ctx := createTestContext(map[string]interface{}{})
 
 	tests := []struct {
 		name  string
@@ -163,7 +173,7 @@ func TestResolveVariablesPrimitives(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ResolveVariables(tt.input, state)
+			result, err := ResolveVariables(tt.input, ctx)
 			if err != nil {
 				t.Errorf("ResolveVariables() error = %v", err)
 			}
@@ -235,7 +245,8 @@ func TestGetValueByPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getValueByPath(tt.path, state)
+			ctx := createTestContext(state)
+			result, err := getValueByPath(tt.path, ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getValueByPath() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -260,6 +271,7 @@ func TestResolveVariablesTypePreservation(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	tests := []struct {
 		name     string
@@ -287,7 +299,7 @@ func TestResolveVariablesTypePreservation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ResolveVariables(tt.input, state)
+			result, err := ResolveVariables(tt.input, ctx)
 			if err != nil {
 				t.Fatalf("ResolveVariables() error = %v", err)
 			}
@@ -309,11 +321,12 @@ func TestResolveVariablesMultipleInString(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	input := "User: {{ $node.user.data.firstName }} {{ $node.user.data.lastName }}"
 	expected := "User: John Doe"
 
-	result, err := ResolveVariables(input, state)
+	result, err := ResolveVariables(input, ctx)
 	if err != nil {
 		t.Fatalf("ResolveVariables() error = %v", err)
 	}
@@ -332,6 +345,7 @@ func TestResolveVariablesComplexNesting(t *testing.T) {
 			},
 		},
 	}
+	ctx := createTestContext(state)
 
 	input := map[string]interface{}{
 		"level1": map[string]interface{}{
@@ -346,7 +360,7 @@ func TestResolveVariablesComplexNesting(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveVariables(input, state)
+	result, err := ResolveVariables(input, ctx)
 	if err != nil {
 		t.Fatalf("ResolveVariables() error = %v", err)
 	}

@@ -75,30 +75,50 @@ func (r *BunRunner) Execute(ctx context.Context, scriptPath string, input any) (
 }
 
 // ExecuteBlock executes a specific block using the appropriate template.
+// Deprecated: Use ExecuteNode for graph-based workflows.
 func (r *BunRunner) ExecuteBlock(ctx context.Context, block Block, input any) (any, error) {
-	var scriptPath string
-
-	// Determine script path based on block type
-	switch block.Type {
-	case BlockTypeHTTPRequest:
-		// Use filepath.Join with the configured BlocksDir
-		scriptPath = filepath.Join(r.BlocksDir, "std", "http_request.ts")
-	case BlockTypeCustomCode:
-		// For custom code, use the custom/code.ts wrapper
-		// The user code is passed via the config.code field
-		scriptPath = filepath.Join(r.BlocksDir, "custom", "code.ts")
-	case BlockTypeCondition:
-		// For conditional branching, use the std/condition.ts block
-		scriptPath = filepath.Join(r.BlocksDir, "std", "condition.ts")
-	case BlockTypeLoop:
-		// For array iteration and mapping, use the std/loop.ts block
-		scriptPath = filepath.Join(r.BlocksDir, "std", "loop.ts")
-	case BlockTypeTransform:
-		// For data transformation, use the std/transform.ts block
-		scriptPath = filepath.Join(r.BlocksDir, "std", "transform.ts")
-	default:
+	scriptPath := r.getScriptPath(NodeType(block.Type))
+	if scriptPath == "" {
 		return nil, fmt.Errorf("unknown block type: %s", block.Type)
 	}
-
 	return r.Execute(ctx, scriptPath, input)
+}
+
+// ExecuteNode executes a node from the graph-based workflow.
+// Returns raw result; caller is responsible for parsing port information.
+func (r *BunRunner) ExecuteNode(ctx context.Context, node *Node, input any) (any, error) {
+	scriptPath := r.getScriptPath(node.Type)
+	if scriptPath == "" {
+		return nil, fmt.Errorf("unknown node type: %s", node.Type)
+	}
+	return r.Execute(ctx, scriptPath, input)
+}
+
+// getScriptPath returns the script path for a given node type.
+func (r *BunRunner) getScriptPath(nodeType NodeType) string {
+	switch nodeType {
+	case NodeTypeHTTPRequest:
+		return filepath.Join(r.BlocksDir, "std", "http_request.ts")
+	case NodeTypeCustomCode:
+		return filepath.Join(r.BlocksDir, "custom", "code.ts")
+	case NodeTypeCondition:
+		return filepath.Join(r.BlocksDir, "std", "condition.ts")
+	case NodeTypeLoop:
+		return filepath.Join(r.BlocksDir, "std", "loop.ts")
+	case NodeTypeTransform:
+		return filepath.Join(r.BlocksDir, "std", "transform.ts")
+	case NodeTypeDelay:
+		return filepath.Join(r.BlocksDir, "std", "delay.ts")
+	case NodeTypeFile:
+		return filepath.Join(r.BlocksDir, "std", "file.ts")
+	case NodeTypeDatabase:
+		return filepath.Join(r.BlocksDir, "std", "database.ts")
+	case NodeTypeWebhook:
+		return filepath.Join(r.BlocksDir, "std", "webhook.ts")
+	case NodeTypeSetVar, NodeTypeGetVar:
+		// Variable blocks are handled natively in Go, no Bun script needed
+		return ""
+	default:
+		return ""
+	}
 }

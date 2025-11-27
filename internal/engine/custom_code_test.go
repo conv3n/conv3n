@@ -35,21 +35,33 @@ func TestCustomCodeSimple(t *testing.T) {
 		t.Fatalf("Expected result to be a map, got: %T", result)
 	}
 
-	// Verify success
-	success, ok := resultMap["success"].(bool)
-	if !ok || !success {
-		t.Fatalf("Expected success=true, got: %v", resultMap)
+	// Verify port
+	port, ok := resultMap["port"].(string)
+	if !ok || port != "default" {
+		t.Fatalf("Expected port=default, got: %v", resultMap["port"])
 	}
 
-	// Verify data
-	data, ok := resultMap["data"].(map[string]interface{})
+	// Verify inner data
+	dataMap, ok := resultMap["data"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("Expected data to be a map, got: %T", resultMap["data"])
 	}
 
-	resultValue, ok := data["result"].(float64)
+	// Verify success
+	success, ok := dataMap["success"].(bool)
+	if !ok || !success {
+		t.Fatalf("Expected success=true, got: %v", dataMap)
+	}
+
+	// Verify actual data payload
+	payload, ok := dataMap["data"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("Expected result to be a number, got: %T", data["result"])
+		t.Fatalf("Expected payload to be a map, got: %T", dataMap["data"])
+	}
+
+	resultValue, ok := payload["result"].(float64)
+	if !ok {
+		t.Fatalf("Expected result to be a number, got: %T", payload["result"])
 	}
 
 	if resultValue != 84 {
@@ -85,15 +97,27 @@ func TestCustomCodeSyntaxError(t *testing.T) {
 		t.Fatalf("Expected result to be a map, got: %T", result)
 	}
 
-	success, ok := resultMap["success"].(bool)
+	// Verify port
+	port, ok := resultMap["port"].(string)
+	if !ok || port != "error" {
+		t.Fatalf("Expected port=error, got: %v", resultMap["port"])
+	}
+
+	// Verify inner data
+	dataMap, ok := resultMap["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected data to be a map, got: %T", resultMap["data"])
+	}
+
+	success, ok := dataMap["success"].(bool)
 	if !ok || success {
-		t.Fatalf("Expected success=false for syntax error, got: %v", resultMap)
+		t.Fatalf("Expected success=false for syntax error, got: %v", dataMap)
 	}
 
 	// Verify error details
-	errorDetails, ok := resultMap["error"].(map[string]interface{})
+	errorDetails, ok := dataMap["error"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("Expected error details, got: %T", resultMap["error"])
+		t.Fatalf("Expected error details, got: %T", dataMap["error"])
 	}
 
 	errorType, ok := errorDetails["type"].(string)
@@ -130,15 +154,27 @@ func TestCustomCodeRuntimeError(t *testing.T) {
 		t.Fatalf("Expected result to be a map, got: %T", result)
 	}
 
-	success, ok := resultMap["success"].(bool)
+	// Verify port
+	port, ok := resultMap["port"].(string)
+	if !ok || port != "error" {
+		t.Fatalf("Expected port=error, got: %v", resultMap["port"])
+	}
+
+	// Verify inner data
+	dataMap, ok := resultMap["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected data to be a map, got: %T", resultMap["data"])
+	}
+
+	success, ok := dataMap["success"].(bool)
 	if !ok || success {
-		t.Fatalf("Expected success=false for runtime error, got: %v", resultMap)
+		t.Fatalf("Expected success=false for runtime error, got: %v", dataMap)
 	}
 
 	// Verify error details
-	errorDetails, ok := resultMap["error"].(map[string]interface{})
+	errorDetails, ok := dataMap["error"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("Expected error details, got: %T", resultMap["error"])
+		t.Fatalf("Expected error details, got: %T", dataMap["error"])
 	}
 
 	message, ok := errorDetails["message"].(string)
@@ -179,19 +215,25 @@ func TestCustomCodeAsync(t *testing.T) {
 		t.Fatalf("Expected result to be a map, got: %T", result)
 	}
 
-	success, ok := resultMap["success"].(bool)
-	if !ok || !success {
-		t.Fatalf("Expected success=true, got: %v", resultMap)
-	}
-
-	data, ok := resultMap["data"].(map[string]interface{})
+	// Verify inner data
+	dataMap, ok := resultMap["data"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("Expected data to be a map, got: %T", resultMap["data"])
 	}
 
-	delayed, ok := data["delayed"].(bool)
+	success, ok := dataMap["success"].(bool)
+	if !ok || !success {
+		t.Fatalf("Expected success=true, got: %v", dataMap)
+	}
+
+	payload, ok := dataMap["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected payload to be a map, got: %T", dataMap["data"])
+	}
+
+	delayed, ok := payload["delayed"].(bool)
 	if !ok || !delayed {
-		t.Errorf("Expected delayed=true, got: %v", data["delayed"])
+		t.Errorf("Expected delayed=true, got: %v", payload["delayed"])
 	}
 }
 
@@ -230,18 +272,24 @@ func TestCustomCodeObjectManipulation(t *testing.T) {
 		t.Fatalf("Expected result to be a map, got: %T", result)
 	}
 
-	success, ok := resultMap["success"].(bool)
-	if !ok || !success {
-		t.Fatalf("Expected success=true, got: %v", resultMap)
-	}
-
-	data, ok := resultMap["data"].(map[string]interface{})
+	// Verify inner data
+	dataMap, ok := resultMap["data"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("Expected data to be a map, got: %T", resultMap["data"])
 	}
 
-	count, ok := data["count"].(float64)
+	success, ok := dataMap["success"].(bool)
+	if !ok || !success {
+		t.Fatalf("Expected success=true, got: %v", dataMap)
+	}
+
+	payload, ok := dataMap["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected payload to be a map, got: %T", dataMap["data"])
+	}
+
+	count, ok := payload["count"].(float64)
 	if !ok || count != 2 {
-		t.Errorf("Expected count=2, got: %v", data["count"])
+		t.Errorf("Expected count=2, got: %v", payload["count"])
 	}
 }

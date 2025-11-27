@@ -147,6 +147,62 @@ func TestWorkflowJSONSerialization(t *testing.T) {
 	original := Workflow{
 		ID:   "workflow-123",
 		Name: "Test Workflow",
+		Nodes: map[string]Node{
+			"node-1": {
+				ID:   "node-1",
+				Type: NodeTypeHTTPRequest,
+				Position: Position{X: 0, Y: 100},
+				Config: map[string]interface{}{
+					"url": "https://api.example.com",
+				},
+			},
+			"node-2": {
+				ID:   "node-2",
+				Type: NodeTypeCustomCode,
+				Position: Position{X: 250, Y: 100},
+				Config: map[string]interface{}{
+					"input": "{{ $node.node-1.data }}",
+				},
+			},
+		},
+		Edges: []Edge{
+			{ID: "e1", Source: "node-1", Target: "node-2", SourceHandle: "default", TargetHandle: "main"},
+		},
+	}
+
+	jsonData, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Failed to marshal Workflow: %v", err)
+	}
+
+	var decoded Workflow
+	err = json.Unmarshal(jsonData, &decoded)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal Workflow: %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("Expected ID %s, got %s", original.ID, decoded.ID)
+	}
+
+	if decoded.Name != original.Name {
+		t.Errorf("Expected Name %s, got %s", original.Name, decoded.Name)
+	}
+
+	if len(decoded.Nodes) != len(original.Nodes) {
+		t.Errorf("Expected %d nodes, got %d", len(original.Nodes), len(decoded.Nodes))
+	}
+
+	if len(decoded.Edges) != len(original.Edges) {
+		t.Errorf("Expected %d edges, got %d", len(original.Edges), len(decoded.Edges))
+	}
+}
+
+// TestLegacyWorkflowJSONSerialization verifies legacy Workflow format
+func TestLegacyWorkflowJSONSerialization(t *testing.T) {
+	original := LegacyWorkflow{
+		ID:   "workflow-123",
+		Name: "Test Workflow",
 		Blocks: []Block{
 			{
 				ID:   "block-1",
@@ -171,29 +227,30 @@ func TestWorkflowJSONSerialization(t *testing.T) {
 
 	jsonData, err := json.Marshal(original)
 	if err != nil {
-		t.Fatalf("Failed to marshal Workflow: %v", err)
+		t.Fatalf("Failed to marshal LegacyWorkflow: %v", err)
 	}
 
-	var decoded Workflow
+	var decoded LegacyWorkflow
 	err = json.Unmarshal(jsonData, &decoded)
 	if err != nil {
-		t.Fatalf("Failed to unmarshal Workflow: %v", err)
+		t.Fatalf("Failed to unmarshal LegacyWorkflow: %v", err)
 	}
 
 	if decoded.ID != original.ID {
 		t.Errorf("Expected ID %s, got %s", original.ID, decoded.ID)
 	}
 
-	if decoded.Name != original.Name {
-		t.Errorf("Expected Name %s, got %s", original.Name, decoded.Name)
-	}
-
 	if len(decoded.Blocks) != len(original.Blocks) {
 		t.Errorf("Expected %d blocks, got %d", len(original.Blocks), len(decoded.Blocks))
 	}
 
-	if len(decoded.Connections) != len(original.Connections) {
-		t.Errorf("Expected %d connections, got %d", len(original.Connections), len(decoded.Connections))
+	// Test conversion to graph format
+	graphWorkflow := original.ToGraphWorkflow()
+	if len(graphWorkflow.Nodes) != 2 {
+		t.Errorf("Expected 2 nodes after conversion, got %d", len(graphWorkflow.Nodes))
+	}
+	if len(graphWorkflow.Edges) != 1 {
+		t.Errorf("Expected 1 edge after conversion, got %d", len(graphWorkflow.Edges))
 	}
 }
 
@@ -223,9 +280,9 @@ func TestExecutionContextResultsManipulation(t *testing.T) {
 	}
 }
 
-// TestBlockConfigTypes verifies BlockConfig can hold various types
+// TestBlockConfigTypes verifies node config can hold various types
 func TestBlockConfigTypes(t *testing.T) {
-	config := BlockConfig{
+	config := map[string]interface{}{
 		"string":  "value",
 		"number":  42,
 		"float":   3.14,
@@ -264,10 +321,10 @@ func TestBlockConfigTypes(t *testing.T) {
 // TestEmptyWorkflow verifies empty workflow handling
 func TestEmptyWorkflow(t *testing.T) {
 	workflow := Workflow{
-		ID:          "empty-workflow",
-		Name:        "Empty",
-		Blocks:      []Block{},
-		Connections: []Connection{},
+		ID:    "empty-workflow",
+		Name:  "Empty",
+		Nodes: map[string]Node{},
+		Edges: []Edge{},
 	}
 
 	jsonData, err := json.Marshal(workflow)
@@ -281,11 +338,11 @@ func TestEmptyWorkflow(t *testing.T) {
 		t.Fatalf("Failed to unmarshal empty workflow: %v", err)
 	}
 
-	if len(decoded.Blocks) != 0 {
-		t.Errorf("Expected 0 blocks, got %d", len(decoded.Blocks))
+	if len(decoded.Nodes) != 0 {
+		t.Errorf("Expected 0 nodes, got %d", len(decoded.Nodes))
 	}
 
-	if len(decoded.Connections) != 0 {
-		t.Errorf("Expected 0 connections, got %d", len(decoded.Connections))
+	if len(decoded.Edges) != 0 {
+		t.Errorf("Expected 0 edges, got %d", len(decoded.Edges))
 	}
 }

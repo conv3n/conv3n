@@ -1,30 +1,34 @@
 // pkg/blocks/std/transform.ts
 // Standard Block: Data Transformation
-// Provides JSONPath queries, field mapping, renaming, and type conversion
+// Provides JSONPath queries, field mapping, renaming, and type conversion.
 
-import { stdin, stdout } from "bun";
 import { query as jsonpathQuery } from "jsonpath-rfc9535";
 
 // Type definitions for transformation operations
 export type TransformOperation =
-    | { type: 'pick'; fields: string[] }
-    | { type: 'rename'; mapping: Record<string, string> }
-    | { type: 'map'; expression: string }
-    | { type: 'jsonpath'; query: string };
+    | { type: "pick"; fields: string[] }
+    | { type: "rename"; mapping: Record<string, string> }
+    | { type: "map"; expression: string }
+    | { type: "jsonpath"; query: string };
 
 export interface TransformConfig {
-    input: any;                          // Input data to transform
+    input?: unknown;                     // Input data to transform
     operations: TransformOperation[];    // Array of operations to apply sequentially
 }
 
 export interface TransformInput {
     config: TransformConfig;
-    input?: any;                         // Data from previous blocks
+    input?: unknown;                     // Data from previous blocks
 }
 
 export interface TransformOutput {
-    data: any;                           // Transformed result
+    data: unknown;                       // Transformed result
     operationsApplied: number;           // Number of operations executed
+}
+
+export interface BlockResult {
+    data: TransformOutput;
+    port: string;
 }
 
 // Validate configuration
@@ -134,7 +138,7 @@ export function applyJSONPath(data: any, queryString: string): any {
 }
 
 // Main execution function
-export async function main() {
+export async function main(): Promise<void> {
     try {
         // 1. Read input
         const input: TransformInput = await Bun.stdin.json();
@@ -145,40 +149,43 @@ export async function main() {
 
         // 3. Get input data
         // Use config.input if provided, otherwise use input.input from previous blocks
-        let data = config.input !== undefined ? config.input : (input.input || {});
+        let data: unknown = config.input !== undefined ? config.input : (input.input ?? {});
 
         // 4. Apply operations sequentially
         let operationsApplied = 0;
         for (const operation of config.operations) {
             switch (operation.type) {
-                case 'pick':
+                case "pick":
                     data = applyPick(data, operation.fields);
                     break;
-                case 'rename':
+                case "rename":
                     data = applyRename(data, operation.mapping);
                     break;
-                case 'map':
+                case "map":
                     data = applyMap(data, operation.expression);
                     break;
-                case 'jsonpath':
+                case "jsonpath":
                     data = applyJSONPath(data, operation.query);
                     break;
             }
             operationsApplied++;
         }
 
-        // 5. Prepare output
-        const output: TransformOutput = {
-            data,
-            operationsApplied,
+        // 5. Build output with port routing
+        const output: BlockResult = {
+            data: {
+                data,
+                operationsApplied,
+            },
+            port: "default",
         };
 
         // 6. Write output
         await Bun.write(Bun.stdout, JSON.stringify(output));
 
-    } catch (error: any) {
-        // Write error to stderr
-        console.error(`Transform Block Failed: ${error.message}`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Transform Block Failed: ${message}`);
         process.exit(1);
     }
 }

@@ -22,6 +22,15 @@ test:
 	@$(BUN_CMD) run test
 	@echo "[test] All tests completed successfully"
 
+# Run coverage tests
+cover:
+	@echo "[cover] Running coverage tests..."
+	@bun test --coverage
+	@go test -coverprofile=coverage.out ./internal/...
+	@go tool cover -func=coverage.out
+	@rm coverage.out
+	@echo "[cover] Coverage tests completed successfully"
+
 # Install or check Go and Bun availability
 install:
 	@echo "[install] Checking Go and Bun..."

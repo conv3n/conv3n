@@ -3,48 +3,13 @@
 
 import { describe, test, expect } from "bun:test";
 import {
-    validateConfig,
     validateExpression,
     evaluateExpression,
+    ConditionBlock,
     type ConditionConfig,
 } from "./condition";
 
 describe("Condition Block", () => {
-    describe("validateConfig", () => {
-        test("should pass for valid config with expression", () => {
-            const config = { expression: "input.value > 10" };
-            expect(() => validateConfig(config)).not.toThrow();
-        });
-
-        test("should throw error when expression is missing", () => {
-            const config = {};
-            expect(() => validateConfig(config)).toThrow("Missing required config: expression");
-        });
-
-        test("should throw error when expression is not a string", () => {
-            const config = { expression: 123 };
-            expect(() => validateConfig(config)).toThrow("Missing required config: expression");
-        });
-
-        test("should throw error when expression is empty", () => {
-            const config = { expression: "   " };
-            expect(() => validateConfig(config)).toThrow("Expression cannot be empty");
-        });
-
-        test("should throw error when config is null", () => {
-            expect(() => validateConfig(null)).toThrow("Missing required config: expression");
-        });
-
-        test("should pass with optional routing fields", () => {
-            const config = {
-                expression: "input.value > 10",
-                trueBlockId: "block_a",
-                falseBlockId: "block_b",
-            };
-            expect(() => validateConfig(config)).not.toThrow();
-        });
-    });
-
     describe("validateExpression", () => {
         test("should pass for valid simple expression", () => {
             expect(() => validateExpression("input.value > 10")).not.toThrow();
@@ -175,6 +140,50 @@ describe("Condition Block", () => {
             const context = { tags: ["javascript", "typescript", "bun"] };
             expect(evaluateExpression("input.tags.includes('bun')", context)).toBe(true);
             expect(evaluateExpression("input.tags.some(tag => tag.startsWith('type'))", context)).toBe(true);
+        });
+    });
+
+    describe("ConditionBlock Class", () => {
+        test("should validate correct config", () => {
+            const block = new ConditionBlock();
+            // @ts-ignore - validate is protected/internal but we want to test it
+            expect(() => block.validate({ expression: "true" })).not.toThrow();
+        });
+
+        test("should throw on missing expression", () => {
+            const block = new ConditionBlock();
+            // @ts-ignore
+            expect(() => block.validate({})).toThrow();
+        });
+
+        test("should throw on invalid expression syntax in validate", () => {
+            const block = new ConditionBlock();
+            // @ts-ignore
+            expect(() => block.validate({ expression: "input. >" })).toThrow("Invalid expression syntax");
+        });
+
+        test("should execute and return result", async () => {
+            const block = new ConditionBlock();
+            const config = { expression: "input.val > 5" };
+            const input = { val: 10 };
+
+            const result = await block.execute(config, input);
+            expect(result.result).toBe(true);
+            expect(result.expression).toBe(config.expression);
+        });
+
+        test("should route to 'true' port", () => {
+            const block = new ConditionBlock();
+            // @ts-ignore - accessing protected method for testing
+            const port = block.getOutputPort({ result: true, expression: "" });
+            expect(port).toBe("true");
+        });
+
+        test("should route to 'false' port", () => {
+            const block = new ConditionBlock();
+            // @ts-ignore
+            const port = block.getOutputPort({ result: false, expression: "" });
+            expect(port).toBe("false");
         });
     });
 });

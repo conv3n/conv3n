@@ -19,6 +19,7 @@ import (
 type Server struct {
 	BlocksDir string
 	Store     storage.Storage
+	Registry  *engine.ExecutionRegistry
 }
 
 func main() {
@@ -68,13 +69,30 @@ func printUsage() {
 
 func runServer(blocksDir string, store storage.Storage) {
 	fmt.Println("Starting Conv3n API Server...")
+
+	// Initialize execution registry for lifecycle management
+	registry := engine.NewExecutionRegistry()
+
+	// Initialize worker pool (limit to 20 concurrent workflows)
+	workerPool := engine.NewWorkerPool(20)
+
+	// Initialize trigger manager
+	triggerManager := engine.NewTriggerManager(store, blocksDir, registry, workerPool)
+
+	// Load existing triggers from storage
+	if err := triggerManager.LoadTriggers(context.Background()); err != nil {
+		log.Printf("Warning: failed to load triggers: %v", err)
+	}
+	defer triggerManager.StopAll()
+
 	server := &Server{
 		BlocksDir: blocksDir,
 		Store:     store,
+		Registry:  registry,
 	}
 
 	mux := http.NewServeMux()
-	
+
 	// Execution API
 	mux.HandleFunc("POST /api/run", server.handleRun)
 
@@ -86,9 +104,37 @@ func runServer(blocksDir string, store storage.Storage) {
 	mux.HandleFunc("DELETE /api/workflows/{id}", wfHandler.Delete)
 	mux.HandleFunc("GET /api/workflows", wfHandler.List)
 
+	// Trigger API
+	triggerHandler := api.NewTriggerHandler(store, triggerManager)
+	mux.HandleFunc("POST /api/triggers", triggerHandler.Create)
+	mux.HandleFunc("GET /api/triggers/{id}", triggerHandler.Get)
+	mux.HandleFunc("PUT /api/triggers/{id}", triggerHandler.Update)
+	mux.HandleFunc("DELETE /api/triggers/{id}", triggerHandler.Delete)
+	mux.HandleFunc("GET /api/triggers", triggerHandler.List)
+	mux.HandleFunc("GET /api/triggers", triggerHandler.List)
+	mux.HandleFunc("GET /api/triggers/{id}/executions", triggerHandler.ListExecutions)
+	mux.HandleFunc("POST /api/webhooks/{id}", triggerHandler.HandleWebhook)
+
+	// Execution history API
+	execHandler := api.NewExecutionHandler(store)
+	mux.HandleFunc("GET /api/workflows/{id}/executions", execHandler.ListByWorkflow)
+	mux.HandleFunc("GET /api/executions/{id}", execHandler.Get)
+	mux.HandleFunc("GET /api/executions/{id}/nodes/{nodeId}", execHandler.GetNodeResult)
+
+	// Lifecycle API (stop, restart)
+	lifecycleHandler := api.NewLifecycleHandler(store, registry, blocksDir)
+	mux.HandleFunc("POST /api/executions/{id}/stop", lifecycleHandler.StopExecution)
+	mux.HandleFunc("POST /api/executions/{id}/restart", lifecycleHandler.RestartExecution)
+	mux.HandleFunc("POST /api/executions/batch/stop", lifecycleHandler.BatchStopExecutions)
+
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
-		w.Write([]byte("OK"))
+		// Return worker pool stats
+		stats := workerPool.Stats()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "OK",
+			"workers": stats,
+		})
 	})
 
 	fmt.Printf("Listening on http://localhost:8080\n")
@@ -116,11 +162,18 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := engine.NewExecutionContext(req.Workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, s.BlocksDir, s.Store)
+	runner := engine.NewWorkflowRunner(ctx, s.BlocksDir, s.Store, s.Registry)
 
 	fmt.Printf("New Job: %s\n", req.Workflow.Name)
 
-	if err := runner.Run(r.Context(), req.Workflow); err != nil {
+	// Create cancellable context for execution
+	execCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Note: We would register execution ID here if we had it before running
+	// For now, the runner creates the execution ID internally
+
+	if err := runner.Run(execCtx, req.Workflow); err != nil {
 		http.Error(w, "Execution Failed: "+err.Error(), 500)
 		return
 	}
@@ -158,7 +211,8 @@ func runCLI(filePath string, blocksDir string, store storage.Storage) {
 	fmt.Printf("Using Blocks Directory: %s\n", blocksDir)
 
 	ctx := engine.NewExecutionContext(workflow.ID)
-	runner := engine.NewWorkflowRunner(ctx, blocksDir, store)
+	// CLI mode doesn't need lifecycle management, pass nil registry
+	runner := engine.NewWorkflowRunner(ctx, blocksDir, store, nil)
 
 	fmt.Printf("Running Workflow: %s\n", workflow.Name)
 
@@ -195,4 +249,5 @@ func runCLI(filePath string, blocksDir string, store storage.Storage) {
 	}
 
 }
+
 // btw i want t suicide

@@ -1,15 +1,13 @@
 // pkg/blocks/std/http_request.ts
 // Standard Block: HTTP Request
-// This script is executed by the Bun Runner. It expects a JSON payload with 'config'.
-
-import { stdin, stdout } from "bun";
+// Executes HTTP requests and returns response with routing port.
 
 // Type definitions for better type safety
 export interface HttpRequestConfig {
     url: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
 }
 
 export interface HttpRequestInput {
@@ -20,12 +18,20 @@ export interface HttpRequestOutput {
     status: number;
     statusText: string;
     headers: Record<string, string>;
-    data: any;
+    data: unknown;
+}
+
+export interface BlockResult {
+    data: HttpRequestOutput;
+    port: string;
 }
 
 // Validate configuration
-export function validateConfig(config: any): void {
-    if (!config || !config.url) {
+export function validateConfig(config: unknown): asserts config is HttpRequestConfig {
+    if (!config || typeof config !== "object") {
+        throw new Error("Missing required config");
+    }
+    if (!("url" in config) || typeof config.url !== "string") {
         throw new Error("Missing required config: url");
     }
 }
@@ -44,18 +50,13 @@ export async function executeHttpRequest(config: HttpRequestConfig): Promise<Htt
 
     // Process response
     const responseData = await response.text();
-    
-    // Debug logging to stderr (won't interfere with stdout JSON)
-    console.error(`[DEBUG] Response text length: ${responseData.length}`);
-    console.error(`[DEBUG] Response text: ${responseData.substring(0, 200)}`);
-    
-    let parsedData;
+
+    let parsedData: unknown;
     try {
         parsedData = JSON.parse(responseData);
-        console.error(`[DEBUG] Parsed data type: ${typeof parsedData}`);
-    } catch (e) {
-        console.error(`[DEBUG] JSON parse failed: ${e}, using raw text`);
-        parsedData = responseData; // Fallback to text if not JSON
+    } catch {
+        // Fallback to raw text if not valid JSON
+        parsedData = responseData;
     }
 
     return {
@@ -66,8 +67,20 @@ export async function executeHttpRequest(config: HttpRequestConfig): Promise<Htt
     };
 }
 
+// Determine output port based on response status
+export function getOutputPort(status: number): string {
+    if (status >= 200 && status < 300) {
+        return "success";
+    } else if (status >= 400 && status < 500) {
+        return "client_error";
+    } else if (status >= 500) {
+        return "server_error";
+    }
+    return "default";
+}
+
 // Main execution function
-export async function main() {
+export async function main(): Promise<void> {
     try {
         // 1. Read Input (Config + Context)
         const input: HttpRequestInput = await Bun.stdin.json();
@@ -79,12 +92,27 @@ export async function main() {
         // 3. Execute request
         const result = await executeHttpRequest(config);
 
-        // 4. Write Output
-        await Bun.write(Bun.stdout, JSON.stringify(result));
+        // 4. Build output with port routing
+        const output: BlockResult = {
+            data: result,
+            port: getOutputPort(result.status),
+        };
+
+        // 5. Write Output
+        await Bun.write(Bun.stdout, JSON.stringify(output));
 
     } catch (error) {
-        // Write error to stderr
-        console.error(`HTTP Request Failed: ${error}`);
+        // Write error result with error port
+        const errorOutput: BlockResult = {
+            data: {
+                status: 0,
+                statusText: "Error",
+                headers: {},
+                data: { error: error instanceof Error ? error.message : String(error) },
+            },
+            port: "error",
+        };
+        await Bun.write(Bun.stdout, JSON.stringify(errorOutput));
         process.exit(1);
     }
 }
