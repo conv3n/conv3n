@@ -57,27 +57,56 @@ export interface BlockDefinition<TConfig = BlockConfig, TOutput = unknown> {
 // =============================================================================
 
 /**
- * Context provided to trigger's start function.
+ * The context provided to a trigger's lifecycle hooks.
  */
-export interface TriggerContext<TConfig = BlockConfig> {
-  /** Trigger configuration from workflow definition */
+export interface TriggerContext<TConfig = Record<string, unknown>> {
+  /**
+   * The configuration for this specific trigger instance, as defined in the workflow.
+   */
   config: TConfig;
-  /** Emit an event to the Go orchestrator and wait for workflow result */
-  emitEvent: <TPayload, TResult>(payload: TPayload) => Promise<TResult>;
-  /** Signal that the trigger is ready to receive events */
-  ready: () => void;
+  /**
+   * Fires the trigger, causing the associated workflow to execute.
+   * The provided payload will be available to the workflow via `ctx.trigger`.
+   * @param payload - The data payload to send with the event.
+   * @returns A promise that resolves with the result of the workflow execution.
+   */
+  fire: <TPayload, TResult>(payload: TPayload) => Promise<TResult>;
 }
 
 /**
- * Trigger definition for long-running event sources.
+ * Definition of a trigger's behavior and lifecycle hooks.
  */
-export interface TriggerDefinition<TConfig = BlockConfig> {
-  /** Unique trigger type identifier (e.g., "trigger/http", "trigger/telegram") */
+export interface TriggerDefinition<TConfig = Record<string, unknown>> {
+  /**
+   * A unique identifier for the trigger type.
+   * @example "cron", "webhook"
+   */
   id: string;
-  /** Trigger startup function (should not return until shutdown) */
-  start: (ctx: TriggerContext<TConfig>) => Promise<void>;
-  /** Optional cleanup function called on shutdown */
-  stop?: () => Promise<void>;
+
+  /**
+   * Called when the trigger is first started by the Conv3n engine.
+   * This is the place to initialize resources, start timers, or connect to services.
+   * @param ctx - The trigger context, including config and the `fire` function.
+   */
+  onStart: (ctx: TriggerContext<TConfig>) => Promise<void>;
+
+  /**
+   * Called when the Conv3n engine is shutting down or the trigger is being disabled.
+   * This is the place to clean up resources, close connections, etc.
+   * @param ctx - The trigger context.
+   */
+  onStop: (ctx: TriggerContext<TConfig>) => Promise<void>;
+
+  /**
+   * Optional: A handler for custom messages sent from the Go host.
+   * For example, a webhook trigger would use this to receive incoming HTTP requests.
+   * @param message - The message received from the Go host.
+   * @param ctx - The trigger context.
+   */
+  onMessage?: (
+    message: OrchestratorMessage,
+    ctx: TriggerContext<TConfig>
+  ) => Promise<void>;
 }
 
 // =============================================================================
@@ -88,9 +117,14 @@ export interface TriggerDefinition<TConfig = BlockConfig> {
  * Messages sent from Go orchestrator to Bun worker (via stdin).
  */
 export type OrchestratorMessage =
+  // Block-related
   | { type: "execute"; input: BlockInput; requestId?: string }
+  // Trigger-related
+  | { type: "start"; config: Record<string, unknown> }
   | { type: "reply"; requestId: string; data: unknown }
-  | { type: "kill" };
+  | { type: "kill" }
+  // General
+  | { type: "invoke"; payload: unknown }; // For triggers like webhooks
 
 /**
  * Messages sent from Bun worker to Go orchestrator (via stdout).

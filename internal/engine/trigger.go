@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os" // For os.Stat to check file existence
+	"os/exec" // For running Bun processes
+	"bufio" // For reading lines from stdout
 	"sync"
 	"time"
 
@@ -19,6 +22,7 @@ const (
 	TriggerTypeCron     TriggerType = "cron"
 	TriggerTypeInterval TriggerType = "interval"
 	TriggerTypeWebhook  TriggerType = "webhook"
+	TriggerTypeTS       TriggerType = "typescript" // New type for TypeScript-based triggers
 )
 
 // Trigger represents a workflow trigger configuration
@@ -28,6 +32,7 @@ type Trigger struct {
 	Type       TriggerType            `json:"type"`
 	Config     map[string]interface{} `json:"config"`
 	Enabled    bool                   `json:"enabled"`
+	FilePath   string                 `json:"file_path"` // Path to the TypeScript trigger file
 }
 
 // TriggerRunner interface for different trigger implementations
@@ -36,6 +41,8 @@ type TriggerRunner interface {
 	Stop() error
 	ID() string
 	Type() TriggerType
+	// Invoke is used by the Go host to send an event to a running TS trigger (e.g., a webhook payload)
+	Invoke(ctx context.Context, payload map[string]interface{}) error
 }
 
 // TriggerManager manages all active triggers
@@ -78,30 +85,41 @@ func (tm *TriggerManager) LoadTriggers(ctx context.Context) error {
 
 		var runner TriggerRunner
 
-		switch t.Type {
-		case "cron":
-			schedule, ok := config["schedule"].(string)
-			if !ok {
-				log.Printf("Error: cron trigger %s missing schedule", t.ID)
+		// Check if it's a TypeScript-based trigger
+		if t.Type == TriggerTypeTS {
+			filePath, ok := config["file_path"].(string)
+			if !ok || filePath == "" {
+				log.Printf("Error: TypeScript trigger %s missing 'file_path' in config", t.ID)
 				continue
 			}
-			runner = NewCronTrigger(t.ID, t.WorkflowID, schedule, tm)
+			runner = NewTSTriggerRunner(t.ID, t.WorkflowID, filePath, config, tm)
+		} else {
+			// Existing Go-native triggers for backward compatibility
+			switch t.Type {
+			case TriggerTypeCron:
+				schedule, ok := config["schedule"].(string)
+				if !ok {
+					log.Printf("Error: cron trigger %s missing schedule", t.ID)
+					continue
+				}
+				runner = NewCronTrigger(t.ID, t.WorkflowID, schedule, tm)
 
-		case "interval":
-			intervalSec, ok := config["interval"].(float64)
-			if !ok {
-				log.Printf("Error: interval trigger %s missing interval", t.ID)
+			case TriggerTypeInterval:
+				intervalSec, ok := config["interval"].(float64)
+				if !ok {
+					log.Printf("Error: interval trigger %s missing interval", t.ID)
+					continue
+				}
+				interval := time.Duration(intervalSec) * time.Second
+				runner = NewIntervalTrigger(t.ID, t.WorkflowID, interval, tm)
+
+			case TriggerTypeWebhook:
+				runner = NewWebhookTrigger(t.ID, t.WorkflowID, tm)
+
+			default:
+				log.Printf("Warning: unsupported trigger type %s for trigger %s", t.Type, t.ID)
 				continue
 			}
-			interval := time.Duration(intervalSec) * time.Second
-			runner = NewIntervalTrigger(t.ID, t.WorkflowID, interval, tm)
-
-		case "webhook":
-			runner = NewWebhookTrigger(t.ID, t.WorkflowID, tm)
-
-		default:
-			log.Printf("Warning: unsupported trigger type %s for trigger %s", t.Type, t.ID)
-			continue
 		}
 
 		if err := tm.Register(runner); err != nil {
@@ -110,6 +128,288 @@ func (tm *TriggerManager) LoadTriggers(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// TSTriggerRunner manages a TypeScript-based trigger executed by Bun.
+type TSTriggerRunner struct {
+	id             string
+	workflowID     string
+	triggerType    TriggerType
+	filePath       string
+	config         map[string]interface{}
+	manager        *TriggerManager
+	cmd            *exec.Cmd
+	stdin          *bufio.Writer
+	stdoutScanner  *bufio.Scanner
+	stopChan       chan struct{}
+	readyChan      chan error
+	requests       sync.Map // Stores channels for pending requests (event replies)
+	isReady        bool
+	mu             sync.Mutex // Protects write access to stdin and state changes
+	cancelContext  context.CancelFunc
+}
+
+// NewTSTriggerRunner creates a new TypeScript trigger runner.
+func NewTSTriggerRunner(id, workflowID, filePath string, config map[string]interface{}, manager *TriggerManager) *TSTriggerRunner {
+	return &TSTriggerRunner{
+		id:          id,
+		workflowID:  workflowID,
+		triggerType: TriggerTypeTS,
+		filePath:    filePath,
+		config:      config,
+		manager:     manager,
+		stopChan:    make(chan struct{}),
+		readyChan:   make(chan error, 1), // Buffered to prevent blocking if ready before read
+	}
+}
+
+func (tr *TSTriggerRunner) ID() string {
+	return tr.id
+}
+
+func (tr *TSTriggerRunner) Type() TriggerType {
+	return tr.triggerType
+}
+
+// Start spawns the Bun process and sets up IPC.
+func (tr *TSTriggerRunner) Start(ctx context.Context) error {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	// Ensure the trigger file exists
+	if _, err := os.Stat(tr.filePath); os.IsNotExist(err) {
+		return fmt.Errorf("TypeScript trigger file not found: %s", tr.filePath)
+	}
+
+	// Create a child context for the Bun process that can be cancelled
+	processCtx, cancel := context.WithCancel(context.Background())
+	tr.cancelContext = cancel
+
+	// Command to run the TypeScript trigger using Bun
+	// We assume 'bun' is in the PATH and the script expects to be run
+	// with 'bun run <script.ts>' which internally calls `runTrigger`.
+	tr.cmd = exec.CommandContext(processCtx, "bun", "run", tr.filePath)
+	tr.cmd.Dir = "." // Run from project root, or specific triggers dir
+
+	// Setup stdin pipe for sending messages to the Bun process
+	stdinPipe, err := tr.cmd.StdinPipe()
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to get stdin pipe for TS trigger %s: %w", tr.id, err)
+	}
+	tr.stdin = bufio.NewWriter(stdinPipe)
+
+	// Setup stdout pipe for reading messages from the Bun process
+	stdoutPipe, err := tr.cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to get stdout pipe for TS trigger %s: %w", tr.id, err)
+	}
+	tr.stdoutScanner = bufio.NewScanner(stdoutPipe)
+
+	// Start the Bun process
+	if err := tr.cmd.Start(); err != nil {
+		cancel()
+		return fmt.Errorf("failed to start Bun process for TS trigger %s: %w", tr.id, err)
+	}
+
+	log.Printf("TS trigger %s: Bun process started (PID: %d)", tr.id, tr.cmd.Process.Pid)
+
+	// Start a goroutine to read and process messages from the Bun process's stdout
+	go tr.readStdoutLoop(processCtx)
+
+	// Send the initial 'start' message with config to the TS trigger
+	startMsg := map[string]interface{}{
+		"type":   "start",
+		"config": tr.config,
+	}
+	if err := tr.sendToTS(startMsg); err != nil {
+		cancel()
+		return fmt.Errorf("failed to send initial start message to TS trigger %s: %w", tr.id, err)
+	}
+
+	// Wait for the TS trigger to signal that it's ready
+	select {
+	case err := <-tr.readyChan:
+		if err != nil {
+			cancel()
+			return fmt.Errorf("TS trigger %s reported error during startup: %w", tr.id, err)
+		}
+		tr.isReady = true
+		log.Printf("TS trigger %s is ready.", tr.id)
+		return nil
+	case <-time.After(10 * time.Second): // Timeout for startup
+		cancel()
+		return fmt.Errorf("TS trigger %s timed out during startup", tr.id)
+	case <-ctx.Done(): // Context cancelled while waiting
+		cancel()
+		return ctx.Err()
+	}
+}
+
+// Stop sends a kill signal to the Bun process and waits for it to exit.
+func (tr *TSTriggerRunner) Stop() error {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if tr.cmd == nil || tr.cmd.Process == nil {
+		return fmt.Errorf("TS trigger %s is not running", tr.id)
+	}
+
+	log.Printf("TS trigger %s: Stopping Bun process (PID: %d)", tr.id, tr.cmd.Process.Pid)
+
+	// Send a 'kill' message for graceful shutdown
+	killMsg := map[string]interface{}{"type": "kill"}
+	if err := tr.sendToTS(killMsg); err != nil {
+		log.Printf("TS trigger %s: failed to send kill message: %v (will try to kill process directly)", tr.id, err)
+	}
+
+	// Cancel the context passed to the command, which should terminate the process
+	if tr.cancelContext != nil {
+		tr.cancelContext()
+	}
+
+	// Wait for the process to exit
+	err := tr.cmd.Wait()
+	if err != nil {
+		log.Printf("TS trigger %s: Bun process exited with error: %v", tr.id, err)
+	} else {
+		log.Printf("TS trigger %s: Bun process exited successfully.", tr.id)
+	}
+
+	// Clean up resources
+	close(tr.stopChan)
+	tr.cmd = nil
+	tr.stdin = nil
+	tr.stdoutScanner = nil
+	tr.isReady = false
+	tr.requests = sync.Map{} // Clear any pending requests
+	return nil
+}
+
+// Invoke sends an 'invoke' message to the running TypeScript trigger.
+func (tr *TSTriggerRunner) Invoke(ctx context.Context, payload map[string]interface{}) error {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	if !tr.isReady {
+		return fmt.Errorf("TS trigger %s is not ready to receive invocations", tr.id)
+	}
+
+	invokeMsg := map[string]interface{}{
+		"type":    "invoke",
+		"payload": payload,
+	}
+	return tr.sendToTS(invokeMsg)
+}
+
+// sendToTS sends a JSON message to the Bun process's stdin.
+func (tr *TSTriggerRunner) sendToTS(msg interface{}) error {
+	jsonBytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message for TS trigger %s: %w", tr.id, err)
+	}
+	if _, err := tr.stdin.Write(jsonBytes); err != nil {
+		return fmt.Errorf("failed to write JSON to TS trigger %s stdin: %w", tr.id, err)
+	}
+	if _, err := tr.stdin.WriteString("\n"); err != nil { // Newline delimiter
+		return fmt.Errorf("failed to write newline to TS trigger %s stdin: %w", tr.id, err)
+	}
+	return tr.stdin.Flush()
+}
+
+// readStdoutLoop continuously reads and processes messages from the Bun process's stdout.
+func (tr *TSTriggerRunner) readStdoutLoop(ctx context.Context) {
+	for tr.stdoutScanner.Scan() {
+		line := tr.stdoutScanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var msg map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			log.Printf("TS trigger %s: failed to unmarshal stdout message '%s': %v", tr.id, line, err)
+			continue
+		}
+
+		msgType, ok := msg["type"].(string)
+		if !ok {
+			log.Printf("TS trigger %s: received message with missing or invalid 'type' field: %v", tr.id, msg)
+			continue
+		}
+
+		switch msgType {
+		case "status":
+			status, sOk := msg["status"].(string)
+			if !sOk {
+				log.Printf("TS trigger %s: received status message with missing or invalid 'status' field: %v", tr.id, msg)
+				continue
+			}
+			if status == "ready" {
+				tr.readyChan <- nil // Signal that the trigger is ready
+			} else if status == "error" {
+				errMsg, _ := msg["message"].(string)
+				tr.readyChan <- fmt.Errorf("startup error: %s", errMsg)
+			}
+
+		case "event":
+			// A TS trigger wants to fire a workflow
+			requestId, rOk := msg["requestId"].(string)
+			payload, pOk := msg["payload"].(map[string]interface{})
+			if !rOk || !pOk {
+				log.Printf("TS trigger %s: received event message with missing or invalid 'requestId' or 'payload': %v", tr.id, msg)
+				continue
+			}
+
+			// Fire the workflow and capture the result/error
+			go func(reqID string, pld map[string]interface{}) {
+				workflowCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute) // Workflow execution timeout
+				defer cancel()
+
+				err := tr.manager.Fire(workflowCtx, tr.id, pld)
+
+				// Send reply back to the TS trigger
+				replyMsg := map[string]interface{}{
+					"type":      "reply",
+					"requestId": reqID,
+				}
+				if err != nil {
+					replyMsg["error"] = err.Error()
+				} else {
+					// Optionally, if Fire returned a result, include it here.
+					// For now, Fire only returns error.
+				}
+				if sendErr := tr.sendToTS(replyMsg); sendErr != nil {
+					log.Printf("TS trigger %s: failed to send reply for request %s: %v", tr.id, reqID, sendErr)
+				}
+			}(requestId, payload)
+
+		case "error":
+			errMsg, _ := msg["message"].(string)
+			stack, _ := msg["stack"].(string)
+			log.Printf("TS trigger %s: Error from Bun process: %s\n%s", tr.id, errMsg, stack)
+
+		default:
+			log.Printf("TS trigger %s: received unknown message type '%s': %v", tr.id, msgType, msg)
+		}
+	}
+
+	// If scanner returns an error, log it
+	if err := tr.stdoutScanner.Err(); err != nil {
+		log.Printf("TS trigger %s: stdout scanner error: %v", tr.id, err)
+	}
+
+	log.Printf("TS trigger %s: stdout read loop exited.", tr.id)
+
+	// Check if the process exited unexpectedly
+	select {
+	case <-ctx.Done(): // Context was cancelled (e.g., graceful shutdown)
+		log.Printf("TS trigger %s: stdout read loop exited due to context cancellation.", tr.id)
+	default: // Process exited without explicit cancellation
+		if tr.cmd != nil && tr.cmd.ProcessState != nil && !tr.cmd.ProcessState.Exited() {
+			log.Printf("TS trigger %s: Bun process exited unexpectedly, PID: %d", tr.id, tr.cmd.Process.Pid)
+		}
+	}
 }
 
 // Register adds and starts a trigger
@@ -307,6 +607,11 @@ func (ct *CronTrigger) Type() TriggerType {
 	return TriggerTypeCron
 }
 
+// Invoke is not applicable for Go-native CronTrigger.
+func (ct *CronTrigger) Invoke(ctx context.Context, payload map[string]interface{}) error {
+	return fmt.Errorf("invoke not supported for CronTrigger")
+}
+
 func (ct *CronTrigger) Start(ctx context.Context) error {
 	ct.cron = cron.New()
 
@@ -369,6 +674,11 @@ func (it *IntervalTrigger) Type() TriggerType {
 	return TriggerTypeInterval
 }
 
+// Invoke is not applicable for Go-native IntervalTrigger.
+func (it *IntervalTrigger) Invoke(ctx context.Context, payload map[string]interface{}) error {
+	return fmt.Errorf("invoke not supported for IntervalTrigger")
+}
+
 func (it *IntervalTrigger) Start(ctx context.Context) error {
 	it.ticker = time.NewTicker(it.interval)
 
@@ -425,6 +735,11 @@ func (wt *WebhookTrigger) ID() string {
 
 func (wt *WebhookTrigger) Type() TriggerType {
 	return TriggerTypeWebhook
+}
+
+// Invoke is not applicable for Go-native WebhookTrigger.
+func (wt *WebhookTrigger) Invoke(ctx context.Context, payload map[string]interface{}) error {
+	return fmt.Errorf("invoke not supported for WebhookTrigger (use TS trigger instead)")
 }
 
 func (wt *WebhookTrigger) Start(ctx context.Context) error {

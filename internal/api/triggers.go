@@ -27,9 +27,10 @@ func NewTriggerHandler(store storage.Storage, manager *engine.TriggerManager) *T
 // CreateTriggerRequest represents the request body for creating a trigger
 type CreateTriggerRequest struct {
 	WorkflowID string                 `json:"workflow_id"`
-	Type       string                 `json:"type"` // cron, interval, webhook
+	Type       string                 `json:"type"` // cron, interval, webhook, typescript
 	Config     map[string]interface{} `json:"config"`
 	Enabled    bool                   `json:"enabled"`
+	FilePath   string                 `json:"file_path"` // Path to the TypeScript trigger file
 }
 
 // Create handles POST /api/triggers
@@ -49,8 +50,14 @@ func (h *TriggerHandler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "type is required", http.StatusBadRequest)
 		return
 	}
-	if req.Type != "cron" && req.Type != "interval" && req.Type != "webhook" {
-		http.Error(w, "type must be cron, interval, or webhook", http.StatusBadRequest)
+	// Updated type validation to include 'typescript'
+	if req.Type != string(engine.TriggerTypeCron) && req.Type != string(engine.TriggerTypeInterval) &&
+		req.Type != string(engine.TriggerTypeWebhook) && req.Type != string(engine.TriggerTypeTS) {
+		http.Error(w, "type must be cron, interval, webhook, or typescript", http.StatusBadRequest)
+		return
+	}
+	if req.Type == string(engine.TriggerTypeTS) && req.FilePath == "" {
+		http.Error(w, "file_path is required for typescript triggers", http.StatusBadRequest)
 		return
 	}
 
@@ -75,6 +82,7 @@ func (h *TriggerHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Type:       req.Type,
 		Config:     configBytes,
 		Enabled:    req.Enabled,
+		FilePath:   req.FilePath, // Assign FilePath
 	}
 
 	if err := h.Store.CreateTrigger(r.Context(), trigger); err != nil {
@@ -149,6 +157,22 @@ func (h *TriggerHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate type
+	if req.Type == "" {
+		http.Error(w, "type is required", http.StatusBadRequest)
+		return
+	}
+	// Updated type validation to include 'typescript'
+	if req.Type != string(engine.TriggerTypeCron) && req.Type != string(engine.TriggerTypeInterval) &&
+		req.Type != string(engine.TriggerTypeWebhook) && req.Type != string(engine.TriggerTypeTS) {
+		http.Error(w, "type must be cron, interval, webhook, or typescript", http.StatusBadRequest)
+		return
+	}
+	if req.Type == string(engine.TriggerTypeTS) && req.FilePath == "" {
+		http.Error(w, "file_path is required for typescript triggers", http.StatusBadRequest)
+		return
+	}
+
 	// Get existing trigger
 	existing, err := h.Store.GetTrigger(r.Context(), triggerID)
 	if err != nil {
@@ -167,6 +191,7 @@ func (h *TriggerHandler) Update(w http.ResponseWriter, r *http.Request) {
 	existing.WorkflowID = req.WorkflowID
 	existing.Type = req.Type
 	existing.Config = configBytes
+	existing.FilePath = req.FilePath // Assign FilePath
 	wasEnabled := existing.Enabled
 	existing.Enabled = req.Enabled
 
@@ -244,15 +269,15 @@ func (h *TriggerHandler) registerTrigger(trigger *storage.Trigger) error {
 
 	var runner engine.TriggerRunner
 
-	switch trigger.Type {
-	case "cron":
+	switch engine.TriggerType(trigger.Type) {
+	case engine.TriggerTypeCron:
 		schedule, ok := config["schedule"].(string)
 		if !ok {
 			return fmt.Errorf("cron trigger requires 'schedule' field")
 		}
 		runner = engine.NewCronTrigger(trigger.ID, trigger.WorkflowID, schedule, h.TriggerManager)
 
-	case "interval":
+	case engine.TriggerTypeInterval:
 		intervalSec, ok := config["interval"].(float64)
 		if !ok {
 			return fmt.Errorf("interval trigger requires 'interval' field (seconds)")
@@ -260,8 +285,14 @@ func (h *TriggerHandler) registerTrigger(trigger *storage.Trigger) error {
 		interval := time.Duration(intervalSec) * time.Second
 		runner = engine.NewIntervalTrigger(trigger.ID, trigger.WorkflowID, interval, h.TriggerManager)
 
-	case "webhook":
+	case engine.TriggerTypeWebhook:
 		runner = engine.NewWebhookTrigger(trigger.ID, trigger.WorkflowID, h.TriggerManager)
+
+	case engine.TriggerTypeTS: // Handle TypeScript triggers
+		if trigger.FilePath == "" {
+			return fmt.Errorf("typescript trigger requires 'file_path'")
+		}
+		runner = engine.NewTSTriggerRunner(trigger.ID, trigger.WorkflowID, trigger.FilePath, config, h.TriggerManager)
 
 	default:
 		return fmt.Errorf("unsupported trigger type: %s", trigger.Type)
@@ -278,20 +309,28 @@ func (h *TriggerHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get trigger to verify it exists and is enabled
-	trigger, err := h.Store.GetTrigger(r.Context(), triggerID)
-	if err != nil {
+	// Get trigger from manager to access its runner instance
+	triggerRunner, exists := h.TriggerManager.GetTrigger(triggerID)
+	if !exists {
 		http.Error(w, "Trigger not found", http.StatusNotFound)
 		return
 	}
 
-	if !trigger.Enabled {
+	// Get trigger details from storage (for enabled status and type validation)
+	triggerFromStore, err := h.Store.GetTrigger(r.Context(), triggerID)
+	if err != nil {
+		http.Error(w, "Trigger not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if !triggerFromStore.Enabled {
 		http.Error(w, "Trigger is disabled", http.StatusForbidden)
 		return
 	}
 
-	if trigger.Type != "webhook" {
-		http.Error(w, "Trigger is not a webhook", http.StatusBadRequest)
+	// Ensure it's a webhook trigger (either Go-native or TS-based webhook)
+	if triggerFromStore.Type != string(engine.TriggerTypeWebhook) && triggerFromStore.Type != string(engine.TriggerTypeTS) {
+		http.Error(w, "Trigger is not a webhook type", http.StatusBadRequest)
 		return
 	}
 
@@ -299,14 +338,8 @@ func (h *TriggerHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	var body interface{}
 	if r.Body != nil {
 		defer r.Body.Close()
-		// Try to parse as JSON, otherwise read as string
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			// Not JSON, maybe raw string?
-			// For now, let's just leave body as nil if not JSON or handle raw bytes if needed.
-			// But for MVP, let's assume JSON or empty.
-			// If we want to support raw body, we would need to read all bytes first.
-			// Let's keep it simple: if JSON decode fails, body is nil or partial.
-		}
+		// Try to parse as JSON. If not JSON, it will be nil, which is acceptable.
+		json.NewDecoder(r.Body).Decode(&body)
 	}
 
 	// Construct payload
@@ -317,10 +350,18 @@ func (h *TriggerHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		"body":    body,
 	}
 
-	// Fire trigger
-	if err := h.TriggerManager.Fire(r.Context(), triggerID, payload); err != nil {
-		http.Error(w, "Failed to fire trigger: "+err.Error(), http.StatusInternalServerError)
-		return
+	// Check if it's a TypeScript trigger runner and invoke it directly
+	if tsRunner, ok := triggerRunner.(*engine.TSTriggerRunner); ok {
+		if err := tsRunner.Invoke(r.Context(), payload); err != nil {
+			http.Error(w, "Failed to invoke TS webhook trigger: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Fallback for old Go-native webhook triggers
+		if err := h.TriggerManager.Fire(r.Context(), triggerID, payload); err != nil {
+			http.Error(w, "Failed to fire Go-native webhook trigger: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
