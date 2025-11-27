@@ -45,9 +45,18 @@ type TriggerRunner interface {
 	Invoke(ctx context.Context, payload map[string]interface{}) error
 }
 
+// ManagerForRunner defines the interface that runners use to interact with the trigger manager.
+// This is used to break the circular dependency for testing purposes.
+type ManagerForRunner interface {
+	Fire(ctx context.Context, triggerID string, payload map[string]interface{}) error
+	GetTrigger(triggerID string) (TriggerRunner, bool)
+	Register(trigger TriggerRunner) error
+	Unregister(triggerID string) error
+}
+
 // TriggerManager manages all active triggers
 type TriggerManager struct {
-	store      storage.Storage
+	Store      storage.Storage
 	blocksDir  string
 	registry   *ExecutionRegistry
 	triggers   map[string]TriggerRunner
@@ -58,7 +67,7 @@ type TriggerManager struct {
 // NewTriggerManager creates a new trigger manager
 func NewTriggerManager(store storage.Storage, blocksDir string, registry *ExecutionRegistry, workerPool *WorkerPool) *TriggerManager {
 	return &TriggerManager{
-		store:      store,
+		Store:      store,
 		blocksDir:  blocksDir,
 		registry:   registry,
 		triggers:   make(map[string]TriggerRunner),
@@ -68,7 +77,7 @@ func NewTriggerManager(store storage.Storage, blocksDir string, registry *Execut
 
 // LoadTriggers loads enabled triggers from storage and starts them
 func (tm *TriggerManager) LoadTriggers(ctx context.Context) error {
-	triggers, err := tm.store.ListAllTriggers(ctx)
+	triggers, err := tm.Store.ListAllTriggers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list triggers: %w", err)
 	}
@@ -137,7 +146,7 @@ type TSTriggerRunner struct {
 	triggerType    TriggerType
 	filePath       string
 	config         map[string]interface{}
-	manager        *TriggerManager
+	manager        ManagerForRunner
 	cmd            *exec.Cmd
 	stdin          *bufio.Writer
 	stdoutScanner  *bufio.Scanner
@@ -150,7 +159,7 @@ type TSTriggerRunner struct {
 }
 
 // NewTSTriggerRunner creates a new TypeScript trigger runner.
-func NewTSTriggerRunner(id, workflowID, filePath string, config map[string]interface{}, manager *TriggerManager) *TSTriggerRunner {
+func NewTSTriggerRunner(id, workflowID, filePath string, config map[string]interface{}, manager ManagerForRunner) *TSTriggerRunner {
 	return &TSTriggerRunner{
 		id:          id,
 		workflowID:  workflowID,
@@ -258,23 +267,37 @@ func (tr *TSTriggerRunner) Stop() error {
 
 	log.Printf("TS trigger %s: Stopping Bun process (PID: %d)", tr.id, tr.cmd.Process.Pid)
 
-	// Send a 'kill' message for graceful shutdown
+	// Send a 'kill' message for graceful shutdown in the TS script
 	killMsg := map[string]interface{}{"type": "kill"}
 	if err := tr.sendToTS(killMsg); err != nil {
-		log.Printf("TS trigger %s: failed to send kill message: %v (will try to kill process directly)", tr.id, err)
+		log.Printf("TS trigger %s: failed to send kill message: %v. The process will be terminated.", tr.id, err)
 	}
 
-	// Cancel the context passed to the command, which should terminate the process
+	// Cancel the context, which sends a signal to the process
 	if tr.cancelContext != nil {
 		tr.cancelContext()
 	}
 
-	// Wait for the process to exit
-	err := tr.cmd.Wait()
-	if err != nil {
-		log.Printf("TS trigger %s: Bun process exited with error: %v", tr.id, err)
-	} else {
-		log.Printf("TS trigger %s: Bun process exited successfully.", tr.id)
+	// Wait for the process to exit, but with a timeout to prevent deadlocks.
+	done := make(chan error, 1)
+	go func() {
+		done <- tr.cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			log.Printf("TS trigger %s: Bun process exited with error: %v", tr.id, err)
+		} else {
+			log.Printf("TS trigger %s: Bun process exited successfully.", tr.id)
+		}
+	case <-time.After(5 * time.Second):
+		log.Printf("TS trigger %s: timed out waiting for process to exit. Forcing kill.", tr.id)
+		// If Wait() timed out, the process is likely stuck. Kill it forcefully.
+		if err := tr.cmd.Process.Kill(); err != nil {
+			log.Printf("TS trigger %s: failed to force kill process: %v", tr.id, err)
+			return fmt.Errorf("failed to kill stuck trigger process %s", tr.id)
+		}
 	}
 
 	// Clean up resources
@@ -521,21 +544,21 @@ func (tm *TriggerManager) Fire(ctx context.Context, triggerID string, payload ma
 		// Since TriggerRunner interface doesn't expose WorkflowID directly (it should),
 		// we might need to fetch the trigger from DB or cast the runner.
 		// For now, let's fetch from DB to be safe and get fresh config.
-		trigger, err := tm.store.GetTrigger(ctx, triggerID)
+		trigger, err := tm.Store.GetTrigger(ctx, triggerID)
 		if err != nil {
 			triggerExec.Status = "failed"
 			msg := err.Error()
 			triggerExec.Error = &msg
-			tm.store.CreateTriggerExecution(ctx, triggerExec)
+			tm.Store.CreateTriggerExecution(ctx, triggerExec)
 			return fmt.Errorf("failed to get trigger: %w", err)
 		}
 
-		workflow, err := tm.store.GetWorkflow(ctx, trigger.WorkflowID)
+		workflow, err := tm.Store.GetWorkflow(ctx, trigger.WorkflowID)
 		if err != nil {
 			triggerExec.Status = "failed"
 			msg := err.Error()
 			triggerExec.Error = &msg
-			tm.store.CreateTriggerExecution(ctx, triggerExec)
+			tm.Store.CreateTriggerExecution(ctx, triggerExec)
 			return fmt.Errorf("failed to get workflow: %w", err)
 		}
 
@@ -545,7 +568,7 @@ func (tm *TriggerManager) Fire(ctx context.Context, triggerID string, payload ma
 			triggerExec.Status = "failed"
 			msg := err.Error()
 			triggerExec.Error = &msg
-			tm.store.CreateTriggerExecution(ctx, triggerExec)
+			tm.Store.CreateTriggerExecution(ctx, triggerExec)
 			return fmt.Errorf("failed to parse workflow: %w", err)
 		}
 
@@ -556,7 +579,7 @@ func (tm *TriggerManager) Fire(ctx context.Context, triggerID string, payload ma
 			execCtx.TriggerData = payload
 		}
 
-		runner := NewWorkflowRunner(execCtx, tm.blocksDir, tm.store, tm.registry)
+		runner := NewWorkflowRunner(execCtx, tm.blocksDir, tm.Store, tm.registry)
 
 		// Execute workflow with timeout
 		execContext, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -568,12 +591,12 @@ func (tm *TriggerManager) Fire(ctx context.Context, triggerID string, payload ma
 			triggerExec.Status = "failed"
 			msg := err.Error()
 			triggerExec.Error = &msg
-			tm.store.CreateTriggerExecution(ctx, triggerExec)
+			tm.Store.CreateTriggerExecution(ctx, triggerExec)
 			return fmt.Errorf("workflow execution failed: %w", err)
 		}
 
 		triggerExec.Status = "success"
-		tm.store.CreateTriggerExecution(ctx, triggerExec)
+		tm.Store.CreateTriggerExecution(ctx, triggerExec)
 
 		log.Printf("Workflow %s completed successfully", trigger.WorkflowID)
 		return nil

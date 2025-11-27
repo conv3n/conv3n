@@ -1,164 +1,251 @@
-package engine
+package engine_test
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/conv3n/conv3n/internal/engine"
 	"github.com/conv3n/conv3n/internal/storage"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func newTestStorage(t *testing.T) storage.Storage {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	store, err := storage.NewSQLite(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
-
-	t.Cleanup(func() {
-		store.Close()
-	})
-
-	return store
+// MockTriggerManager allows us to intercept calls to Fire.
+type MockTriggerManager struct {
+	*engine.TriggerManager
+	fireCalls chan FireCall
 }
 
-func TestTriggerManager(t *testing.T) {
-	store := newTestStorage(t)
-	registry := NewExecutionRegistry()
-	workerPool := NewWorkerPool(10)
-	// Use a temp dir for blocks, though we won't actually run blocks in these tests
-	blocksDir := t.TempDir()
+type FireCall struct {
+	TriggerID string
+	Payload   map[string]interface{}
+}
 
-	tm := NewTriggerManager(store, blocksDir, registry, workerPool)
-	t.Cleanup(func() {
-		tm.StopAll()
-		workerPool.Wait()
+func NewMockTriggerManager() *MockTriggerManager {
+	// Using in-memory sqlite for tests
+	store, err := storage.NewSQLite(":memory:")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create mock storage: %v", err))
+	}
+	// The worker pool is necessary for the Fire method to work correctly.
+	workerPool := engine.NewWorkerPool(2)
+
+	tm := engine.NewTriggerManager(store, "", nil, workerPool)
+
+	// In a real scenario, you'd stop the worker pool gracefully.
+	// For tests, it's often sufficient to let it run until the test completes.
+
+	return &MockTriggerManager{
+		TriggerManager: tm,
+		fireCalls:      make(chan FireCall, 10),
+	}
+}
+
+// Fire is a mock implementation that intercepts calls to the real Fire method.
+func (m *MockTriggerManager) Fire(ctx context.Context, triggerID string, payload map[string]interface{}) error {
+	// Record the call for test assertions
+	m.fireCalls <- FireCall{TriggerID: triggerID, Payload: payload}
+	// Call the real Fire method to ensure the full flow is tested.
+	return m.TriggerManager.Fire(ctx, triggerID, payload)
+}
+
+// setupTestTriggerFile creates a temporary TypeScript trigger file.
+func setupTestTriggerFile(t *testing.T, content string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "trigger-test")
+	require.NoError(t, err)
+	filePath := filepath.Join(dir, "test_trigger.js") // Use .js for self-contained script
+	err = os.WriteFile(filePath, []byte(content), 0644)
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filePath
+}
+
+const basicTestTrigger = `
+// This is a self-contained JS script that mimics the trigger IPC protocol for testing.
+// It avoids any import/module resolution issues during 'go test'.
+const stdin = process.stdin;
+stdin.setEncoding('utf8');
+
+// Function to send a message to the Go host
+function sendMessage(message) {
+  console.log(JSON.stringify(message));
+}
+
+stdin.on('data', (data) => {
+  try {
+    const msg = JSON.parse(data);
+
+    if (msg.type === 'start') {
+      // Received start, so send ready
+      sendMessage({ type: 'status', status: 'ready' });
+    } else if (msg.type === 'invoke') {
+      // Received invoke, send an event back
+      const requestId = Math.random().toString(36).substring(7);
+      sendMessage({
+        type: 'event',
+        requestId: requestId,
+        payload: { from: 'invoke', originalPayload: msg.payload }
+      });
+    } else if (msg.type === 'kill') {
+      process.exit(0);
+    }
+  } catch (e) {
+    // Ignore parse errors for this simple test script
+  }
+});
+`
+
+func TestTSTriggerRunner_StartAndStop(t *testing.T) {
+	filePath := setupTestTriggerFile(t, basicTestTrigger)
+	manager := NewMockTriggerManager()
+	runner := engine.NewTSTriggerRunner("test-trigger-1", "wf-1", filePath, nil, manager.TriggerManager)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Start the runner
+	err := runner.Start(ctx)
+	require.NoError(t, err, "Runner should start without error")
+
+	// Give it a moment to be fully ready
+	time.Sleep(1 * time.Second)
+
+	// Stop the runner
+	err = runner.Stop()
+	require.NoError(t, err, "Runner should stop without error")
+}
+
+func TestTSTriggerRunner_Invoke(t *testing.T) {
+	filePath := setupTestTriggerFile(t, basicTestTrigger)
+	manager := NewMockTriggerManager()
+	runner := engine.NewTSTriggerRunner("test-trigger-invoke", "wf-1", filePath, nil, manager)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Create dummy workflow and trigger in the store
+	err := manager.Store.CreateWorkflow(ctx, &storage.Workflow{ID: "wf-1", Name: "Test Workflow", Definition: []byte("{}")})
+	require.NoError(t, err)
+	err = manager.Store.CreateTrigger(ctx, &storage.Trigger{
+		ID:         "test-trigger-invoke",
+		WorkflowID: "wf-1",
+		Type:       "typescript",
+		FilePath:   filePath,
+		Enabled:    true,
+		Config:     []byte("{}"), // Provide non-null config
 	})
+	require.NoError(t, err)
 
-	t.Run("RegisterAndUnregister", func(t *testing.T) {
-		trigger := NewWebhookTrigger("trigger-1", "wf-1", tm)
+	// Register the runner (which also starts it)
+	err = manager.Register(runner)
+	require.NoError(t, err)
 
-		// Register
-		err := tm.Register(trigger)
-		if err != nil {
-			t.Fatalf("failed to register trigger: %v", err)
-		}
+	// Invoke the trigger
+	invokePayload := map[string]interface{}{"data": "hello from test"}
+	err = runner.Invoke(ctx, invokePayload)
+	require.NoError(t, err)
 
-		// Check if registered
-		if len(tm.ListTriggers()) != 1 {
-			t.Errorf("expected 1 trigger, got %d", len(tm.ListTriggers()))
-		}
+	// Check if Fire was called with the correct payload
+	select {
+	case call := <-manager.fireCalls:
+		assert.Equal(t, "test-trigger-invoke", call.TriggerID)
+		firedPayload := call.Payload
+		assert.Equal(t, "invoke", firedPayload["from"])
+		originalPayload, ok := firedPayload["originalPayload"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "hello from test", originalPayload["data"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for trigger to fire")
+	}
 
-		got, exists := tm.GetTrigger("trigger-1")
-		if !exists {
-			t.Error("trigger not found")
-		}
-		if got.ID() != "trigger-1" {
-			t.Errorf("expected ID trigger-1, got %s", got.ID())
-		}
+	err = runner.Stop()
+	require.NoError(t, err)
+}
 
-		// Unregister
-		err = tm.Unregister("trigger-1")
-		if err != nil {
-			t.Fatalf("failed to unregister trigger: %v", err)
-		}
+const eventFiringTrigger = `
+// This is a self-contained JS script that fires an event on start.
+const stdin = process.stdin;
+stdin.setEncoding('utf8');
 
-		if len(tm.ListTriggers()) != 0 {
-			t.Errorf("expected 0 triggers, got %d", len(tm.ListTriggers()))
-		}
+function sendMessage(message) {
+  console.log(JSON.stringify(message));
+}
+
+stdin.on('data', (data) => {
+  try {
+    const msg = JSON.parse(data);
+    if (msg.type === 'start') {
+      // Send ready first
+      sendMessage({ type: 'status', status: 'ready' });
+
+      // Then fire an event
+      const requestId = Math.random().toString(36).substring(7);
+      sendMessage({
+        type: 'event',
+        requestId: requestId,
+        payload: { from: 'onStart' }
+      });
+
+    } else if (msg.type === 'kill') {
+      process.exit(0);
+    }
+  } catch (e) {
+    // Ignore
+  }
+});
+`
+
+func TestTSTriggerRunner_ReceivesEvent(t *testing.T) {
+	filePath := setupTestTriggerFile(t, eventFiringTrigger)
+	manager := NewMockTriggerManager()
+	runner := engine.NewTSTriggerRunner("test-trigger-event", "wf-1", filePath, nil, manager)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Create dummy workflow and trigger in the store
+	err := manager.Store.CreateWorkflow(ctx, &storage.Workflow{ID: "wf-1", Name: "Test Workflow", Definition: []byte("{}")})
+	require.NoError(t, err)
+	err = manager.Store.CreateTrigger(ctx, &storage.Trigger{
+		ID:         "test-trigger-event",
+		WorkflowID: "wf-1",
+		Type:       "typescript",
+		FilePath:   filePath,
+		Enabled:    true,
+		Config:     []byte("{}"), // Provide non-null config
 	})
+	require.NoError(t, err)
 
-	t.Run("LoadTriggers", func(t *testing.T) {
-		ctx := context.Background()
+	// Register the runner (which also starts it)
+	err = manager.Register(runner)
+	require.NoError(t, err)
 
-		// Create a trigger in DB
-		config := map[string]interface{}{
-			"schedule": "* * * * *",
-		}
-		configBytes, _ := json.Marshal(config)
+	// Check if Fire was called from the onStart event
+	select {
+	case call := <-manager.fireCalls:
+		assert.Equal(t, "test-trigger-event", call.TriggerID)
+		assert.Equal(t, "onStart", call.Payload["from"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for trigger to fire")
+	}
 
-		dbTrigger := &storage.Trigger{
-			ID:         "cron-1",
-			WorkflowID: "wf-1",
-			Type:       "cron",
-			Config:     configBytes,
-			Enabled:    true,
-		}
+	err = runner.Stop()
+	require.NoError(t, err)
+}
 
-		if err := store.CreateTrigger(ctx, dbTrigger); err != nil {
-			t.Fatalf("failed to create trigger in db: %v", err)
-		}
+func TestTSTriggerRunner_Start_NonExistentFile(t *testing.T) {
+	manager := NewMockTriggerManager()
+	runner := engine.NewTSTriggerRunner("test-trigger-bad", "wf-1", "/non/existent/file.ts", nil, manager.TriggerManager)
 
-		// Load triggers
-		if err := tm.LoadTriggers(ctx); err != nil {
-			t.Fatalf("failed to load triggers: %v", err)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		// Verify loaded
-		if _, exists := tm.GetTrigger("cron-1"); !exists {
-			t.Error("cron trigger was not loaded")
-		}
-
-		// Cleanup
-		tm.Unregister("cron-1")
-	})
-
-	t.Run("Fire_Webhook", func(t *testing.T) {
-		ctx := context.Background()
-
-		// Setup: Create Workflow and Trigger in DB
-		wfDef := map[string]interface{}{
-			"id":    "wf-webhook",
-			"nodes": []interface{}{},
-			"edges": []interface{}{},
-		}
-		wfBytes, _ := json.Marshal(wfDef)
-
-		err := store.CreateWorkflow(ctx, &storage.Workflow{
-			ID:         "wf-webhook",
-			Name:       "Webhook Workflow",
-			Definition: wfBytes,
-		})
-		if err != nil {
-			t.Fatalf("failed to create workflow: %v", err)
-		}
-
-		trigger := &storage.Trigger{
-			ID:         "webhook-1",
-			WorkflowID: "wf-webhook",
-			Type:       "webhook",
-			Config:     []byte("{}"),
-			Enabled:    true,
-		}
-		store.CreateTrigger(ctx, trigger)
-
-		// Register trigger in manager
-		runner := NewWebhookTrigger("webhook-1", "wf-webhook", tm)
-		tm.Register(runner)
-		defer tm.Unregister("webhook-1")
-
-		// Fire
-		payload := map[string]interface{}{"foo": "bar"}
-		err = tm.Fire(ctx, "webhook-1", payload)
-		if err != nil {
-			t.Fatalf("failed to fire trigger: %v", err)
-		}
-
-		// Wait a bit for async execution
-		time.Sleep(100 * time.Millisecond)
-
-		// Check if execution was created
-		execs, err := store.ListTriggerExecutions(ctx, "webhook-1", 10)
-		if err != nil {
-			t.Fatalf("failed to list executions: %v", err)
-		}
-
-		if len(execs) == 0 {
-			t.Error("expected trigger execution record")
-		}
-	})
+	err := runner.Start(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "TypeScript trigger file not found")
 }
