@@ -1,0 +1,1 @@
+The project development is temporarily frozen, I have some other ideas, while I will implement them, I will learn React and so on, because now I do not understand the Frontend, you should continue to wait, the project is not closed, it is frozen
