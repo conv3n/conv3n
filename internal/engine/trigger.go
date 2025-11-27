@@ -86,7 +86,7 @@ func (tm *TriggerManager) LoadTriggers(ctx context.Context) error {
 		var runner TriggerRunner
 
 		// Check if it's a TypeScript-based trigger
-		if t.Type == TriggerTypeTS {
+		if TriggerType(t.Type) == TriggerTypeTS {
 			filePath, ok := config["file_path"].(string)
 			if !ok || filePath == "" {
 				log.Printf("Error: TypeScript trigger %s missing 'file_path' in config", t.ID)
@@ -95,7 +95,7 @@ func (tm *TriggerManager) LoadTriggers(ctx context.Context) error {
 			runner = NewTSTriggerRunner(t.ID, t.WorkflowID, filePath, config, tm)
 		} else {
 			// Existing Go-native triggers for backward compatibility
-			switch t.Type {
+			switch TriggerType(t.Type) {
 			case TriggerTypeCron:
 				schedule, ok := config["schedule"].(string)
 				if !ok {

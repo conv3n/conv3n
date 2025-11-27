@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // Pure Go SQLite driver (no CGO required)
@@ -179,14 +180,6 @@ func initSchema(db *sql.DB) error {
 		FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
 	);
 
-	-- Add file_path column if it doesn't exist (for schema migration)
-	-- The default value is important for existing entries before this column was added.
-	-- This must be done as a separate ALTER TABLE statement.
-	PRAGMA user_version = 1;
-	ALTER TABLE triggers ADD COLUMN file_path TEXT NOT NULL DEFAULT '';
-	PRAGMA user_version = 2;
-
-
 	-- Index for querying triggers by workflow
 	CREATE INDEX IF NOT EXISTS idx_triggers_workflow
 		ON triggers(workflow_id);
@@ -218,24 +211,38 @@ func initSchema(db *sql.DB) error {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
 
-	// Manual check and ALTER TABLE for file_path column due to `IF NOT EXISTS` limitation
-	// This ensures existing databases are upgraded correctly.
-	_, err = db.Exec("ALTER TABLE triggers ADD COLUMN file_path TEXT NOT NULL DEFAULT ''")
+	// Idempotent migration to add 'file_path' to triggers table if it doesn't exist.
+	rows, err := db.Query("PRAGMA table_info(triggers)")
 	if err != nil {
-		// Ignore error if column already exists (SQLITE_ERROR: duplicate column name)
-		if !isDuplicateColumnError(err) {
-			return fmt.Errorf("failed to add file_path column to triggers table: %w", err)
+		return fmt.Errorf("failed to get triggers table info: %w", err)
+	}
+	defer rows.Close()
+
+	var columnExists bool
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			ctype      string
+			notnull    int
+			dflt_value *string
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt_value, &pk); err != nil {
+			return fmt.Errorf("failed to scan table info row: %w", err)
+		}
+		if name == "file_path" {
+			columnExists = true
+			break
 		}
 	}
 
-	// Update the CHECK constraint to include 'typescript' (this requires dropping and re-adding the constraint)
-	// SQLite does not support ALTER TABLE ADD CHECK constraint directly, so we need to
-	// get the existing table info, drop, and recreate if the constraint needs updating.
-	// For simplicity in this example, we'll assume the new CHECK constraint is added
-	// on CREATE TABLE IF NOT EXISTS for new tables, and for existing tables,
-	// direct addition of 'typescript' to the enum would typically be managed
-	// by application-level validation or a more robust migration system.
-	// For now, the `CHECK(type IN ...)` in `CREATE TABLE` and the `ALTER TABLE` above handle the basics.
+	if !columnExists {
+		_, err = db.Exec("ALTER TABLE triggers ADD COLUMN file_path TEXT NOT NULL DEFAULT ''")
+		if err != nil {
+			return fmt.Errorf("failed to add file_path column to triggers table: %w", err)
+		}
+	}
 
 	return nil
 }
